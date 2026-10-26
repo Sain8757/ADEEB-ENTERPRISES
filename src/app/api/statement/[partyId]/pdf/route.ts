@@ -674,16 +674,18 @@ table.statement-table tfoot td:last-child {
   color: #64748b;
 }
 
-/* Center Background Watermark */
+/* Center Background Watermark - Pure Round Circle */
 .watermark-container {
   position: fixed;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 440px;
-  max-width: 70vw;
-  height: 440px;
-  max-height: 70vh;
+  width: 430px;
+  max-width: 65vw;
+  height: 430px;
+  max-height: 65vh;
+  border-radius: 50%;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -696,8 +698,10 @@ table.statement-table tfoot td:last-child {
 .watermark-logo {
   width: 100%;
   height: 100%;
-  object-fit: contain;
-  opacity: 0.07; /* Soft & subtle watermark: logo is clearly visible, yet all numbers, text & lines stay 100% visible */
+  object-fit: cover;
+  border-radius: 50%;
+  clip-path: circle(50% at 50% 50%);
+  opacity: 0.08; /* Soft & subtle watermark: round circular emblem is clearly visible, zero square edges! */
 }
 
 /* Ensure all statement content sits cleanly on top of watermark */
@@ -724,9 +728,13 @@ table.statement-table tbody td {
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
+    border-radius: 50%;
+    overflow: hidden;
   }
   .watermark-logo {
-    opacity: 0.07 !important;
+    border-radius: 50%;
+    clip-path: circle(50% at 50% 50%);
+    opacity: 0.08 !important;
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
   }
