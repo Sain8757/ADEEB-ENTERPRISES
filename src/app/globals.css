@@ -1,0 +1,847 @@
+/* ADEEB ENTERPRISES — Windows 95 Classic Desktop CSS Design System */
+
+@import url('https://fonts.googleapis.com/css2?family=Tahoma:wght@400;700&display=swap');
+
+/* ═══════════════════════════════════════════════════════
+   CSS CUSTOM PROPERTIES — Win95 Color System
+═══════════════════════════════════════════════════════ */
+:root {
+  --win95-desktop:      #008080;   /* Classic teal desktop */
+  --win95-bg:           #c0c0c0;   /* Main gray window background */
+  --win95-bg-dark:      #808080;   /* Darker gray */
+  --win95-bg-light:     #dfdfdf;   /* Lighter gray for raised surfaces */
+  --win95-white:        #ffffff;
+  --win95-black:        #000000;
+  --win95-title-active: #000080;   /* Navy title bar */
+  --win95-title-text:   #ffffff;
+  --win95-title-inactive: #808080;
+  --win95-highlight:    #000080;   /* Navy selection */
+  --win95-highlight-text: #ffffff;
+  --win95-text:         #000000;
+  --win95-disabled:     #808080;
+  --win95-border-light: #ffffff;
+  --win95-border-mid:   #dfdfdf;
+  --win95-border-dark:  #808080;
+  --win95-border-darker:#000000;
+  --win95-btn-face:     #c0c0c0;
+  --win95-inset-light:  #808080;
+  --win95-inset-dark:   #ffffff;
+  --win95-menubar:      #c0c0c0;
+  --win95-status:       #c0c0c0;
+  --win95-red:          #800000;
+  --win95-green:        #008000;
+
+  /* Brand accents (used sparingly in title bar/logo) */
+  --brand-navy:         #0a1628;
+  --brand-gold:         #c9a227;
+
+  --font-ui:            'Tahoma', 'Arial', sans-serif;
+  --font-mono:          'Courier New', monospace;
+  --font-size-sm:       11px;
+  --font-size-base:     12px;
+  --font-size-md:       13px;
+  --font-size-lg:       14px;
+  --font-size-xl:       16px;
+}
+
+/* ═══════════════════════════════════════════════════════
+   RESET & BASE
+═══════════════════════════════════════════════════════ */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+  font-family: var(--font-ui);
+  font-size: var(--font-size-base);
+  color: var(--win95-text);
+  background: var(--win95-desktop);
+  overflow: hidden;
+}
+
+/* ═══════════════════════════════════════════════════════
+   BEVEL MIXINS (via utility classes)
+═══════════════════════════════════════════════════════ */
+
+/* Raised: looks like a button or window surface */
+.raised {
+  border-top:    2px solid var(--win95-border-light);
+  border-left:   2px solid var(--win95-border-light);
+  border-right:  2px solid var(--win95-border-darker);
+  border-bottom: 2px solid var(--win95-border-darker);
+}
+
+/* Sunken: looks like an input field */
+.sunken {
+  border-top:    2px solid var(--win95-border-darker);
+  border-left:   2px solid var(--win95-border-darker);
+  border-right:  2px solid var(--win95-border-light);
+  border-bottom: 2px solid var(--win95-border-light);
+}
+
+/* Single pixel border */
+.border-1 { border: 1px solid var(--win95-border-dark); }
+
+/* ═══════════════════════════════════════════════════════
+   MAIN DESKTOP LAYOUT
+═══════════════════════════════════════════════════════ */
+
+.desktop {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--win95-desktop);
+  overflow: hidden;
+}
+
+/* ═══════════════════════════════════════════════════════
+   WINDOW CHROME
+═══════════════════════════════════════════════════════ */
+
+.win-window {
+  background: var(--win95-bg);
+  border-top:    2px solid var(--win95-border-light);
+  border-left:   2px solid var(--win95-border-light);
+  border-right:  2px solid var(--win95-border-darker);
+  border-bottom: 2px solid var(--win95-border-darker);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* ═══════════════════════════════════════════════════════
+   TITLE BAR
+═══════════════════════════════════════════════════════ */
+
+.title-bar {
+  background: var(--brand-navy);
+  color: var(--win95-title-text);
+  padding: 3px 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.title-bar-text {
+  font-size: var(--font-size-md);
+  font-weight: bold;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.title-bar-logo {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
+
+.title-btn {
+  width: 16px;
+  height: 14px;
+  background: var(--win95-btn-face);
+  color: var(--win95-text);
+  font-size: 9px;
+  font-weight: bold;
+  border-top:    2px solid var(--win95-border-light);
+  border-left:   2px solid var(--win95-border-light);
+  border-right:  2px solid var(--win95-border-darker);
+  border-bottom: 2px solid var(--win95-border-darker);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════════════
+   MENU BAR
+═══════════════════════════════════════════════════════ */
+
+.menu-bar {
+  background: var(--win95-menubar);
+  border-bottom: 1px solid var(--win95-border-dark);
+  display: flex;
+  align-items: stretch;
+  flex-shrink: 0;
+  padding: 1px 2px;
+}
+
+.menu-item {
+  position: relative;
+  padding: 2px 8px;
+  cursor: pointer;
+  font-size: var(--font-size-base);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.menu-item:hover,
+.menu-item.active {
+  background: var(--win95-highlight);
+  color: var(--win95-highlight-text);
+}
+
+.menu-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  background: var(--win95-bg);
+  border-top:    2px solid var(--win95-border-light);
+  border-left:   2px solid var(--win95-border-light);
+  border-right:  2px solid var(--win95-border-darker);
+  border-bottom: 2px solid var(--win95-border-darker);
+  z-index: 1000;
+  min-width: 160px;
+  display: none;
+}
+
+.menu-item.active .menu-dropdown {
+  display: block;
+}
+
+.menu-dropdown-item {
+  padding: 3px 20px;
+  white-space: nowrap;
+  cursor: pointer;
+  font-size: var(--font-size-base);
+}
+
+.menu-dropdown-item:hover {
+  background: var(--win95-highlight);
+  color: var(--win95-highlight-text);
+}
+
+.menu-dropdown-separator {
+  border-top: 1px solid var(--win95-border-dark);
+  border-bottom: 1px solid var(--win95-border-light);
+  margin: 2px 0;
+}
+
+/* ═══════════════════════════════════════════════════════
+   TOOLBAR
+═══════════════════════════════════════════════════════ */
+
+.toolbar {
+  background: var(--win95-bg);
+  border-bottom: 1px solid var(--win95-border-dark);
+  padding: 2px 4px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.toolbar-btn {
+  background: var(--win95-btn-face);
+  border-top:    2px solid var(--win95-border-light);
+  border-left:   2px solid var(--win95-border-light);
+  border-right:  2px solid var(--win95-border-darker);
+  border-bottom: 2px solid var(--win95-border-darker);
+  padding: 2px 8px;
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  font-family: var(--font-ui);
+  color: var(--win95-text);
+  white-space: nowrap;
+}
+
+.toolbar-btn:active {
+  border-top:    2px solid var(--win95-border-darker);
+  border-left:   2px solid var(--win95-border-darker);
+  border-right:  2px solid var(--win95-border-light);
+  border-bottom: 2px solid var(--win95-border-light);
+}
+
+.toolbar-btn:disabled {
+  color: var(--win95-disabled);
+  cursor: default;
+}
+
+.toolbar-separator {
+  width: 2px;
+  height: 20px;
+  border-left:  1px solid var(--win95-border-dark);
+  border-right: 1px solid var(--win95-border-light);
+  margin: 0 2px;
+}
+
+/* ═══════════════════════════════════════════════════════
+   MAIN CONTENT AREA (sidebar + workspace)
+═══════════════════════════════════════════════════════ */
+
+.app-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ═══════════════════════════════════════════════════════
+   SIDEBAR / NAVIGATOR
+═══════════════════════════════════════════════════════ */
+
+.sidebar {
+  width: 160px;
+  background: var(--win95-bg);
+  border-right: 2px solid var(--win95-border-dark);
+  flex-shrink: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-section {
+  padding: 4px 0;
+  border-bottom: 1px solid var(--win95-border-dark);
+}
+
+.sidebar-heading {
+  font-size: var(--font-size-sm);
+  font-weight: bold;
+  padding: 2px 8px;
+  color: var(--win95-disabled);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 12px;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  text-decoration: none;
+  color: var(--win95-text);
+  white-space: nowrap;
+}
+
+.sidebar-link:hover {
+  background: var(--win95-highlight);
+  color: var(--win95-highlight-text);
+}
+
+.sidebar-link.active {
+  background: var(--win95-highlight);
+  color: var(--win95-highlight-text);
+}
+
+/* ═══════════════════════════════════════════════════════
+   WORKSPACE / CONTENT PANE
+═══════════════════════════════════════════════════════ */
+
+.workspace {
+  flex: 1;
+  overflow: auto;
+  background: var(--win95-bg);
+  padding: 4px;
+}
+
+/* ═══════════════════════════════════════════════════════
+   STATUS BAR
+═══════════════════════════════════════════════════════ */
+
+.status-bar {
+  background: var(--win95-status);
+  border-top: 1px solid var(--win95-border-dark);
+  padding: 2px 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--font-size-sm);
+  flex-shrink: 0;
+}
+
+.status-panel {
+  padding: 1px 6px;
+  border-top:    2px solid var(--win95-border-darker);
+  border-left:   2px solid var(--win95-border-darker);
+  border-right:  2px solid var(--win95-border-light);
+  border-bottom: 2px solid var(--win95-border-light);
+  white-space: nowrap;
+}
+
+/* ═══════════════════════════════════════════════════════
+   FORMS & CONTROLS
+═══════════════════════════════════════════════════════ */
+
+.win95-input {
+  background: var(--win95-white);
+  border-top:    2px solid var(--win95-border-darker);
+  border-left:   2px solid var(--win95-border-darker);
+  border-right:  2px solid var(--win95-border-light);
+  border-bottom: 2px solid var(--win95-border-light);
+  padding: 2px 4px;
+  font-family: var(--font-ui);
+  font-size: var(--font-size-base);
+  color: var(--win95-text);
+  outline: none;
+  width: 100%;
+}
+
+.win95-input:focus {
+  outline: 1px dotted var(--win95-text);
+  outline-offset: -2px;
+}
+
+.win95-input:disabled {
+  background: var(--win95-bg);
+  color: var(--win95-disabled);
+}
+
+.win95-select {
+  background: var(--win95-white);
+  border-top:    2px solid var(--win95-border-darker);
+  border-left:   2px solid var(--win95-border-darker);
+  border-right:  2px solid var(--win95-border-light);
+  border-bottom: 2px solid var(--win95-border-light);
+  padding: 2px 4px;
+  font-family: var(--font-ui);
+  font-size: var(--font-size-base);
+  color: var(--win95-text);
+  outline: none;
+  width: 100%;
+  cursor: pointer;
+}
+
+.win95-btn {
+  background: var(--win95-btn-face);
+  border-top:    2px solid var(--win95-border-light);
+  border-left:   2px solid var(--win95-border-light);
+  border-right:  2px solid var(--win95-border-darker);
+  border-bottom: 2px solid var(--win95-border-darker);
+  padding: 4px 16px;
+  font-family: var(--font-ui);
+  font-size: var(--font-size-base);
+  color: var(--win95-text);
+  cursor: pointer;
+  min-width: 75px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.win95-btn:active {
+  border-top:    2px solid var(--win95-border-darker);
+  border-left:   2px solid var(--win95-border-darker);
+  border-right:  2px solid var(--win95-border-light);
+  border-bottom: 2px solid var(--win95-border-light);
+  padding: 5px 15px 3px 17px;
+}
+
+.win95-btn:disabled {
+  color: var(--win95-disabled);
+  cursor: default;
+}
+
+.win95-btn-primary {
+  font-weight: bold;
+}
+
+.win95-btn-danger {
+  color: var(--win95-red);
+}
+
+/* ─── Checkbox ─── */
+.win95-checkbox {
+  accent-color: var(--win95-highlight);
+  width: 13px;
+  height: 13px;
+  cursor: pointer;
+}
+
+/* ─── Label ─── */
+.form-label {
+  font-size: var(--font-size-sm);
+  margin-bottom: 2px;
+  display: block;
+  white-space: nowrap;
+}
+
+/* ─── Form row ─── */
+.form-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.form-field-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ─── Group box (like Win95 frame) ─── */
+.group-box {
+  border-top:    2px solid var(--win95-border-darker);
+  border-left:   2px solid var(--win95-border-darker);
+  border-right:  2px solid var(--win95-border-light);
+  border-bottom: 2px solid var(--win95-border-light);
+  padding: 8px;
+  margin-bottom: 8px;
+  position: relative;
+}
+
+.group-box-title {
+  position: absolute;
+  top: -8px;
+  left: 8px;
+  background: var(--win95-bg);
+  padding: 0 4px;
+  font-size: var(--font-size-sm);
+  font-weight: bold;
+}
+
+/* ═══════════════════════════════════════════════════════
+   TABLES
+═══════════════════════════════════════════════════════ */
+
+.win95-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: var(--font-size-sm);
+}
+
+.win95-table th {
+  background: var(--win95-bg);
+  border: 1px solid var(--win95-border-dark);
+  padding: 2px 6px;
+  text-align: left;
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+  user-select: none;
+  font-weight: bold;
+  border-top:    2px solid var(--win95-border-light);
+  border-left:   2px solid var(--win95-border-light);
+  border-right:  2px solid var(--win95-border-darker);
+  border-bottom: 2px solid var(--win95-border-darker);
+}
+
+.win95-table td {
+  border: 1px solid var(--win95-border-dark);
+  padding: 2px 6px;
+  white-space: nowrap;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.win95-table tr:nth-child(even) td {
+  background: var(--win95-bg-light);
+}
+
+.win95-table tr:hover td {
+  background: var(--win95-highlight);
+  color: var(--win95-highlight-text);
+}
+
+.win95-table tr.selected td {
+  background: var(--win95-highlight);
+  color: var(--win95-highlight-text);
+}
+
+.win95-table td.num,
+.win95-table th.num {
+  text-align: right;
+}
+
+.win95-table td.amount {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+}
+
+.win95-table tfoot td {
+  font-weight: bold;
+  border-top: 2px solid var(--win95-border-dark);
+  background: var(--win95-bg);
+}
+
+/* ─── Table container with scroll ─── */
+.table-container {
+  overflow: auto;
+  border-top:    2px solid var(--win95-border-darker);
+  border-left:   2px solid var(--win95-border-darker);
+  border-right:  2px solid var(--win95-border-light);
+  border-bottom: 2px solid var(--win95-border-light);
+  background: var(--win95-white);
+}
+
+/* ═══════════════════════════════════════════════════════
+   MODAL DIALOGS
+═══════════════════════════════════════════════════════ */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.modal-window {
+  background: var(--win95-bg);
+  border-top:    2px solid var(--win95-border-light);
+  border-left:   2px solid var(--win95-border-light);
+  border-right:  2px solid var(--win95-border-darker);
+  border-bottom: 2px solid var(--win95-border-darker);
+  min-width: 280px;
+  max-width: 90vw;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-body {
+  padding: 12px;
+  overflow: auto;
+  flex: 1;
+}
+
+.modal-footer {
+  padding: 6px 12px;
+  border-top: 1px solid var(--win95-border-dark);
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+/* ═══════════════════════════════════════════════════════
+   MESSAGE BOXES
+═══════════════════════════════════════════════════════ */
+
+.msgbox-icon {
+  width: 32px;
+  height: 32px;
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.alert-box {
+  padding: 6px 8px;
+  border: 1px solid;
+  margin-bottom: 6px;
+  font-size: var(--font-size-sm);
+}
+
+.alert-box.error {
+  background: #fff0f0;
+  border-color: var(--win95-red);
+  color: var(--win95-red);
+}
+
+.alert-box.warning {
+  background: #fffacc;
+  border-color: #808000;
+  color: #404000;
+}
+
+.alert-box.info {
+  background: #f0f4ff;
+  border-color: #000080;
+  color: #000080;
+}
+
+.alert-box.success {
+  background: #f0fff0;
+  border-color: var(--win95-green);
+  color: var(--win95-green);
+}
+
+/* ═══════════════════════════════════════════════════════
+   BRAND HEADER (in window title area)
+═══════════════════════════════════════════════════════ */
+
+.brand-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  background: var(--brand-navy);
+  color: var(--win95-white);
+  flex-shrink: 0;
+}
+
+.brand-name {
+  font-size: var(--font-size-lg);
+  font-weight: bold;
+  color: var(--brand-gold);
+  letter-spacing: 0.5px;
+}
+
+.brand-sub {
+  font-size: var(--font-size-sm);
+  color: var(--win95-white);
+  opacity: 0.8;
+}
+
+/* ═══════════════════════════════════════════════════════
+   DASHBOARD TILES (Win95 style, not modern cards)
+═══════════════════════════════════════════════════════ */
+
+.stat-tile {
+  background: var(--win95-bg);
+  border-top:    2px solid var(--win95-border-darker);
+  border-left:   2px solid var(--win95-border-darker);
+  border-right:  2px solid var(--win95-border-light);
+  border-bottom: 2px solid var(--win95-border-light);
+  padding: 6px 10px;
+  min-width: 140px;
+}
+
+.stat-tile-label {
+  font-size: var(--font-size-sm);
+  color: var(--win95-disabled);
+  margin-bottom: 2px;
+}
+
+.stat-tile-value {
+  font-size: var(--font-size-lg);
+  font-weight: bold;
+  font-family: var(--font-mono);
+}
+
+.stat-tile-value.dr { color: var(--win95-red); }
+.stat-tile-value.cr { color: var(--win95-green); }
+
+/* ═══════════════════════════════════════════════════════
+   LEDGER / ACCOUNT STATEMENT SPECIFIC
+═══════════════════════════════════════════════════════ */
+
+.ledger-balance-dr {
+  color: var(--win95-red);
+  font-weight: bold;
+}
+
+.ledger-balance-cr {
+  color: var(--win95-green);
+  font-weight: bold;
+}
+
+.category-badge {
+  display: inline-block;
+  padding: 0 4px;
+  font-size: var(--font-size-sm);
+  font-weight: bold;
+  border: 1px solid var(--win95-border-dark);
+  background: var(--win95-white);
+}
+
+.category-badge.bc { background: #e0eeff; border-color: #000080; color: #000080; }
+.category-badge.sc { background: #e0ffe0; border-color: #008000; color: #008000; }
+.category-badge.vc { background: #fff0e0; border-color: #804000; color: #804000; }
+
+/* ═══════════════════════════════════════════════════════
+   PAGE SECTION HEADING
+═══════════════════════════════════════════════════════ */
+
+.section-heading {
+  font-size: var(--font-size-md);
+  font-weight: bold;
+  padding: 4px 0;
+  margin-bottom: 8px;
+  border-bottom: 2px solid var(--win95-border-dark);
+}
+
+/* ═══════════════════════════════════════════════════════
+   SCROLLBAR (Win95 style)
+═══════════════════════════════════════════════════════ */
+
+::-webkit-scrollbar { width: 16px; height: 16px; }
+::-webkit-scrollbar-track { background: var(--win95-bg); }
+::-webkit-scrollbar-thumb {
+  background: var(--win95-btn-face);
+  border-top:    2px solid var(--win95-border-light);
+  border-left:   2px solid var(--win95-border-light);
+  border-right:  2px solid var(--win95-border-darker);
+  border-bottom: 2px solid var(--win95-border-darker);
+}
+::-webkit-scrollbar-button {
+  background: var(--win95-btn-face);
+  border-top:    2px solid var(--win95-border-light);
+  border-left:   2px solid var(--win95-border-light);
+  border-right:  2px solid var(--win95-border-darker);
+  border-bottom: 2px solid var(--win95-border-darker);
+  height: 16px;
+  width: 16px;
+}
+
+/* ═══════════════════════════════════════════════════════
+   RESPONSIVE OVERRIDES
+═══════════════════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+  .sidebar {
+    width: 120px;
+  }
+  .win95-table td,
+  .win95-table th {
+    padding: 2px 4px;
+    font-size: 10px;
+  }
+  .workspace {
+    padding: 2px;
+  }
+}
+
+@media (max-width: 480px) {
+  .sidebar {
+    display: none;
+  }
+  .toolbar-btn span.label {
+    display: none;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
+   PRINT STYLES
+═══════════════════════════════════════════════════════ */
+
+@media print {
+  .sidebar, .menu-bar, .toolbar, .status-bar, .title-btn, .no-print {
+    display: none !important;
+  }
+  body { background: white; overflow: auto; }
+  .win-window { border: none; }
+  .workspace { overflow: visible; }
+}
+
+/* ═══════════════════════════════════════════════════════
+   UTILITY
+═══════════════════════════════════════════════════════ */
+
+.text-muted { color: var(--win95-disabled); }
+.text-right { text-align: right; }
+.text-center { text-align: center; }
+.text-bold { font-weight: bold; }
+.mono { font-family: var(--font-mono); }
+.nowrap { white-space: nowrap; }
+.flex { display: flex; }
+.flex-1 { flex: 1; }
+.items-center { align-items: center; }
+.gap-2 { gap: 8px; }
+.gap-1 { gap: 4px; }
+.mt-1 { margin-top: 4px; }
+.mt-2 { margin-top: 8px; }
+.mb-1 { margin-bottom: 4px; }
+.mb-2 { margin-bottom: 8px; }
+.p-1 { padding: 4px; }
+.p-2 { padding: 8px; }
+.w-full { width: 100%; }
+.hidden { display: none; }

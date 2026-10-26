@@ -1,0 +1,357 @@
+// ADEEB ENTERPRISES — Buffalo Trading Ledger
+// Prisma Schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────
+
+enum UserRole {
+  ADMIN
+  OPERATOR
+  VIEWER
+}
+
+enum BalanceDirection {
+  DR // Debit — Party owes ADEEB ENTERPRISES (Receivable)
+  CR // Credit — ADEEB ENTERPRISES owes party (Payable)
+}
+
+enum Category {
+  BC              // B/C — Big Cattle (new entries)
+  SC              // S/C — Small Cattle (new entries)
+  VC_HISTORICAL   // V/C — preserved from historical import only
+}
+
+enum PaymentDirection {
+  RECEIVED // Cash/payment received from party
+  PAID     // Cash/payment paid to party
+}
+
+enum TxType {
+  OPENING_BALANCE
+  PURCHASE
+  PAYMENT_RECEIVED
+  PAYMENT_PAID
+  ADJUSTMENT
+  REVERSAL
+}
+
+enum ImportStatus {
+  PENDING
+  REVIEWING
+  CONFIRMED
+  REJECTED
+  PARTIAL
+}
+
+enum ImportTxStatus {
+  PENDING
+  CONFIRMED
+  SKIPPED
+  DUPLICATE
+}
+
+// ─────────────────────────────────────────────
+// BUSINESS SETTINGS
+// ─────────────────────────────────────────────
+
+model Business {
+  id             String   @id @default(cuid())
+  name           String   @default("ADEEB ENTERPRISES")
+  mobile         String   @default("7050047146")
+  address        String?
+  logoPath       String?
+  statementFooter String? @default("Amounts you record. Not calculated, filed or verified by this app.")
+  currency       String   @default("INR")
+  cashExRate     Decimal  @default(200) @db.Decimal(10, 4)
+  cashExBasis    Decimal  @default(100000) @db.Decimal(12, 2)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+// ─────────────────────────────────────────────
+// USERS & AUTH
+// ─────────────────────────────────────────────
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String
+  passwordHash String
+  role         UserRole  @default(OPERATOR)
+  active       Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  purchases      PurchaseEntry[]
+  payments       Payment[]
+  auditLogs      AuditLog[]
+  importBatches  ImportBatch[]
+  cashExExpenses CashExExpense[]
+  ledgerEntries  LedgerEntry[]
+}
+
+// ─────────────────────────────────────────────
+// PARTIES
+// ─────────────────────────────────────────────
+
+model Party {
+  id                      String           @id @default(cuid())
+  code                    String?          @unique
+  name                    String
+  mobile                  String?
+  address                 String?
+  openingBalance          Decimal          @default(0) @db.Decimal(15, 2)
+  openingBalanceDirection BalanceDirection @default(DR)
+  openingBalanceDate      DateTime?
+  notes                   String?
+  active                  Boolean          @default(true)
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime         @updatedAt
+
+  purchases     PurchaseEntry[]
+  payments      Payment[]
+  ledgerEntries LedgerEntry[]
+  importBatches ImportBatch[]
+
+  @@index([name])
+}
+
+// ─────────────────────────────────────────────
+// PURCHASE ENTRIES
+// ─────────────────────────────────────────────
+
+model PurchaseEntry {
+  id            String    @id @default(cuid())
+  date          DateTime
+  partyId       String
+  receiptNo     String?
+  qty           Int
+  category      Category
+  totalWeight   Decimal   @db.Decimal(10, 3)
+  avgWeight     Decimal   @db.Decimal(10, 3)
+  rate          Decimal   @db.Decimal(10, 2)
+  amount        Decimal   @db.Decimal(15, 2)
+  notes         String?
+  createdById   String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  importBatchId String?
+  reversed      Boolean   @default(false)
+  reversedById  String?
+  reversedAt    DateTime?
+  reversalNote  String?
+
+  party       Party        @relation(fields: [partyId], references: [id])
+  createdBy   User?        @relation(fields: [createdById], references: [id])
+  importBatch ImportBatch? @relation(fields: [importBatchId], references: [id])
+  ledgerEntries LedgerEntry[]
+
+  @@index([partyId, date])
+  @@index([receiptNo])
+  @@index([importBatchId])
+}
+
+// ─────────────────────────────────────────────
+// PAYMENTS
+// ─────────────────────────────────────────────
+
+model Payment {
+  id            String           @id @default(cuid())
+  date          DateTime
+  partyId       String
+  refNo         String?
+  direction     PaymentDirection
+  method        String           @default("CASH")
+  amount        Decimal          @db.Decimal(15, 2)
+  notes         String?
+  bankRef       String?
+  createdById   String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  importBatchId String?
+  reversed      Boolean          @default(false)
+  reversedById  String?
+  reversedAt    DateTime?
+  reversalNote  String?
+
+  party        Party         @relation(fields: [partyId], references: [id])
+  createdBy    User?         @relation(fields: [createdById], references: [id])
+  importBatch  ImportBatch?  @relation(fields: [importBatchId], references: [id])
+  cashExExpense CashExExpense?
+  ledgerEntries LedgerEntry[]
+
+  @@index([partyId, date])
+  @@index([importBatchId])
+}
+
+// ─────────────────────────────────────────────
+// CASH EX EXPENSES (separate from party ledger)
+// ─────────────────────────────────────────────
+
+model CashExExpense {
+  id                String    @id @default(cuid())
+  paymentId         String    @unique  // links to the eligible cash RECEIVED payment
+  date              DateTime
+  cashAmount        Decimal   @db.Decimal(15, 2)  // the cash received amount
+  expenseAmount     Decimal   @db.Decimal(15, 2)  // = cashAmount * rate / basis
+  rateApplied       Decimal   @db.Decimal(10, 4)  // e.g. 200
+  basisApplied      Decimal   @db.Decimal(12, 2)  // e.g. 100000
+  overrideAmount    Decimal?  @db.Decimal(15, 2)  // if user manually overrode
+  overrideReason    String?
+  confirmedById     String?
+  confirmedAt       DateTime  @default(now())
+  reversed          Boolean   @default(false)
+  reversedAt        DateTime?
+  reversalNote      String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  payment     Payment @relation(fields: [paymentId], references: [id])
+  confirmedBy User?   @relation(fields: [confirmedById], references: [id])
+
+  @@index([date])
+}
+
+// ─────────────────────────────────────────────
+// LEDGER ENTRIES (party-level double entry)
+// ─────────────────────────────────────────────
+
+model LedgerEntry {
+  id             String    @id @default(cuid())
+  partyId        String
+  date           DateTime
+  txType         TxType
+  refNo          String?
+  description    String
+  debit          Decimal   @default(0) @db.Decimal(15, 2)
+  credit         Decimal   @default(0) @db.Decimal(15, 2)
+  runningBalance Decimal   @db.Decimal(15, 2)
+  sourceTxId     String?   // PurchaseEntry.id or Payment.id
+  sourceTxType   String?   // "PURCHASE" | "PAYMENT"
+  createdById    String?
+  createdAt      DateTime  @default(now())
+  reversed       Boolean   @default(false)
+
+  party       Party          @relation(fields: [partyId], references: [id])
+  createdBy   User?          @relation(fields: [createdById], references: [id])
+  purchase    PurchaseEntry? @relation(fields: [sourceTxId], references: [id], map: "ledger_purchase_fk")
+  payment     Payment?       @relation(fields: [sourceTxId], references: [id], map: "ledger_payment_fk")
+
+  @@index([partyId, date])
+  @@index([sourceTxId])
+}
+
+// ─────────────────────────────────────────────
+// PDF IMPORT BATCHES
+// ─────────────────────────────────────────────
+
+model ImportBatch {
+  id            String       @id @default(cuid())
+  filename      String
+  fileHash      String       @unique
+  fileSize      Int
+  uploadedById  String?
+  uploadedAt    DateTime     @default(now())
+  partyId       String?
+  status        ImportStatus @default(PENDING)
+  rawExtract    String?      @db.Text
+  warnings      String?      @db.Text
+  confirmedAt   DateTime?
+  confirmedById String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  uploadedBy   User?                @relation(fields: [uploadedById], references: [id])
+  party        Party?               @relation(fields: [partyId], references: [id])
+  transactions ImportTransaction[]
+  purchases    PurchaseEntry[]
+  payments     Payment[]
+
+  @@index([fileHash])
+  @@index([status])
+}
+
+model ImportTransaction {
+  id             String         @id @default(cuid())
+  batchId        String
+  rowIndex       Int
+  txType         String         // "PURCHASE" | "PAYMENT"
+  rawData        String         @db.Text  // JSON of original extracted values
+  correctedData  String?        @db.Text  // JSON of user-corrected values
+  vcMapping      String?        // "SC" if user mapped VC→SC, else null
+  vcMappingNote  String?
+  status         ImportTxStatus @default(PENDING)
+  savedTxId      String?        // ID of resulting PurchaseEntry or Payment
+  savedTxType    String?
+  warnings       String?        @db.Text
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  batch ImportBatch @relation(fields: [batchId], references: [id])
+
+  @@index([batchId])
+}
+
+// ─────────────────────────────────────────────
+// AUDIT LOG
+// ─────────────────────────────────────────────
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  userEmail  String?
+  action     String   // CREATE, UPDATE, DELETE, IMPORT, REVERSE, LOGIN, etc.
+  entity     String   // Party, PurchaseEntry, Payment, etc.
+  entityId   String?
+  before     String?  @db.Text  // JSON snapshot
+  after      String?  @db.Text  // JSON snapshot
+  note       String?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([entity, entityId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────
+// CONFIGURABLE PAYMENT METHODS
+// ─────────────────────────────────────────────
+
+model PaymentMethod {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  label     String
+  active    Boolean  @default(true)
+  isDefault Boolean  @default(false)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─────────────────────────────────────────────
+// RATE HISTORY (for suggested defaults)
+// ─────────────────────────────────────────────
+
+model RateHistory {
+  id        String   @id @default(cuid())
+  partyId   String
+  category  Category
+  rate      Decimal  @db.Decimal(10, 2)
+  usedAt    DateTime @default(now())
+
+  @@index([partyId, category, usedAt])
+}
