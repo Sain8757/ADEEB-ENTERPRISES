@@ -766,12 +766,54 @@ table.statement-table tbody td {
 }
 
 @media print {
-  body { background: #ffffff !important; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-  .no-print { display: none !important; }
-  #statement-doc { padding: 0 !important; margin: 0 !important; box-shadow: none !important; }
-  table.statement-table tr { page-break-inside: avoid; }
-  .summary-container { page-break-inside: avoid; }
-  .doc-footer { page-break-inside: avoid; }
+  @page {
+    size: A4 portrait;
+    margin: 10mm 12mm 26mm 12mm;
+  }
+  html, body {
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .doc-scroll-wrapper {
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: transparent !important;
+  }
+  #statement-doc {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+  table.statement-table {
+    width: 100% !important;
+    table-layout: fixed !important;
+  }
+  table.statement-table th,
+  table.statement-table td {
+    padding: 5px 6px !important;
+    font-size: 10.5px !important;
+    overflow: hidden !important;
+    word-break: break-word !important;
+  }
+  table.statement-table tr {
+    page-break-inside: avoid;
+  }
+  .summary-container {
+    page-break-inside: avoid;
+  }
+  .doc-footer {
+    page-break-inside: avoid;
+  }
   .watermark-container {
     position: fixed;
     top: 50%;
@@ -787,38 +829,39 @@ table.statement-table tbody td {
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
   }
+  .stamp-disclaimer-img {
+    width: 230px !important;
+    display: inline-block !important;
+    transform: rotate(-1.5deg) !important;
+    print-color-adjust: exact !important;
+    -webkit-print-color-adjust: exact !important;
+  }
 }
 
 @media screen {
   #running-footer { display: none; }
-  #statement-doc {
-    max-width: 860px;
-    margin: 20px auto;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
+  body {
+    background: #334155;
+    margin: 0;
+    padding: 0;
   }
-}
-
-@media screen and (max-width: 640px) {
-  #statement-doc {
-    margin: 8px auto;
-    padding: 14px 10px;
-    border-radius: 0;
-    border-left: none;
-    border-right: none;
-  }
-  .header-wrapper {
-    flex-direction: column;
-    gap: 14px;
-  }
-  .stat-box {
+  .doc-scroll-wrapper {
     width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 16px 8px;
+    box-sizing: border-box;
   }
-  .formula-row {
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 4px;
+  #statement-doc {
+    width: 780px;
+    min-width: 780px;
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 24px 28px;
+    background: #ffffff;
+    box-shadow: 0 4px 25px rgba(0,0,0,0.3);
+    border-radius: 4px;
+    box-sizing: border-box;
   }
 }
 
@@ -829,19 +872,31 @@ const filename = '${pdfFilename}';
 const partyName = '${safePartyName}';
 const whatsappPhone = '${whatsappPhone}';
 const whatsappDirectUrl = "${whatsappDirectUrl.replace(/"/g, '\\"')}";
+let currentPdfBlob = null;
+let currentPdfFile = null;
 
 async function generatePdfBlob() {
   const element = document.getElementById('statement-doc');
   if (!window.html2pdf) {
     throw new Error('PDF generator bundle not ready');
   }
+
+  // Lock element to exact 780px during capture so mobile screens NEVER squish content
+  const origWidth = element.style.width;
+  const origMinWidth = element.style.minWidth;
+  const origMaxWidth = element.style.maxWidth;
+  element.style.width = '780px';
+  element.style.minWidth = '780px';
+  element.style.maxWidth = '780px';
+
   const opt = {
-    margin: [8, 10, 12, 10],
+    margin: [10, 10, 15, 10],
     filename: filename,
     image: { type: 'jpeg', quality: 0.98 },
     html2canvas: {
-      scale: 1.8,
-      windowWidth: 1024,
+      scale: 2,
+      width: 780,
+      windowWidth: 1200,
       useCORS: true,
       letterRendering: true,
       backgroundColor: '#ffffff',
@@ -850,7 +905,14 @@ async function generatePdfBlob() {
     },
     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
   };
-  return await html2pdf().set(opt).from(element).outputPdf('blob');
+
+  try {
+    return await html2pdf().set(opt).from(element).outputPdf('blob');
+  } finally {
+    element.style.width = origWidth;
+    element.style.minWidth = origMinWidth;
+    element.style.maxWidth = origMaxWidth;
+  }
 }
 
 async function downloadPdfFile() {
@@ -860,39 +922,26 @@ async function downloadPdfFile() {
 
   try {
     const blob = await generatePdfBlob();
-    const file = new File([blob], filename, { type: 'application/pdf' });
+    currentPdfBlob = blob;
+    currentPdfFile = new File([blob], filename, { type: 'application/pdf' });
 
-    // On mobile (iOS Safari / Android Chrome):
-    // Use Web Share API if supported so user gets native "Save to Files", "WhatsApp", "Drive"
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      try {
-        await navigator.share({
-          title: filename,
-          files: [file]
-        });
-        return;
-      } catch (shareErr) {
-        if (shareErr.name === 'AbortError') return;
-      }
-    }
-
-    // Standard download fallback
+    // Standard download
     const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = blobUrl;
     a.download = filename;
     document.body.appendChild(a);
     a.click();
-    setTimeout(() => { document.body.removeChild(a); }, 200);
+    setTimeout(() => { document.body.removeChild(a); }, 250);
 
-    // On iOS Safari where synthetic download is ignored, open in browser reader
+    // On iOS Safari where synthetic download is ignored, open in native viewer
     const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
     if (isIOS) {
       window.location.href = blobUrl;
     }
   } catch (err) {
     console.error('PDF generation error:', err);
-    alert('PDF creation direct error. Opening system print/save instead.');
+    alert('System print dialog se Save as PDF karein.');
     window.print();
   } finally {
     if (btn) { btn.innerHTML = origText; btn.disabled = false; }
@@ -902,43 +951,106 @@ async function downloadPdfFile() {
 async function shareWhatsAppPdf() {
   const btn = document.getElementById('btn-whatsapp');
   const origText = btn ? btn.innerHTML : '';
-  if (btn) { btn.innerHTML = '⏳ Attaching PDF...'; btn.disabled = true; }
+  if (btn) { btn.innerHTML = '⏳ PDF Ban Raha Hai...'; btn.disabled = true; }
 
   try {
     const blob = await generatePdfBlob();
-    const file = new File([blob], filename, { type: 'application/pdf' });
+    currentPdfBlob = blob;
+    currentPdfFile = new File([blob], filename, { type: 'application/pdf' });
 
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      // NOTE: Passing ONLY files (without conflicting text) ensures WhatsApp on iOS & Android
-      // opens the attachment picker with the PDF file directly attached!
-      await navigator.share({
-        files: [file]
-      });
-    } else {
-      // Browser without file share: Download PDF and open party WhatsApp
-      const blobUrl = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = blobUrl;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => {
-        document.body.removeChild(a);
-        window.location.href = whatsappDirectUrl;
-      }, 300);
+    // Open WhatsApp Share Modal
+    const modal = document.getElementById('whatsapp-share-modal');
+    if (modal) {
+      modal.style.display = 'flex';
     }
   } catch (err) {
-    if (err.name !== 'AbortError') {
-      console.error('WhatsApp share error:', err);
-      window.location.href = whatsappDirectUrl;
-    }
+    console.error('WhatsApp share error:', err);
+    window.location.href = whatsappDirectUrl;
   } finally {
     if (btn) { btn.innerHTML = origText; btn.disabled = false; }
+  }
+}
+
+async function handleDirectNativeShare() {
+  if (!currentPdfFile) return;
+  if (navigator.canShare && navigator.canShare({ files: [currentPdfFile] })) {
+    try {
+      await navigator.share({
+        files: [currentPdfFile]
+      });
+      document.getElementById('whatsapp-share-modal').style.display = 'none';
+      return;
+    } catch (e) {
+      if (e.name === 'AbortError') return;
+    }
+  }
+  handleModalDownloadPdf();
+  window.open(whatsappDirectUrl, '_blank');
+  document.getElementById('whatsapp-share-modal').style.display = 'none';
+}
+
+function handleModalDownloadPdf() {
+  if (!currentPdfBlob) return;
+  const blobUrl = URL.createObjectURL(currentPdfBlob);
+  const a = document.createElement('a');
+  a.href = blobUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { document.body.removeChild(a); }, 250);
+
+  const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if (isIOS) {
+    window.location.href = blobUrl;
   }
 }
 </script>
 </head>
 <body>
+
+<!-- WhatsApp Share Modal for 100% Reliable Mobile Delivery -->
+<div id="whatsapp-share-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:99999; align-items:center; justify-content:center; padding:16px;">
+  <div style="background:#ffffff; border-radius:12px; max-width:440px; width:100%; padding:22px; box-shadow:0 12px 30px rgba(0,0,0,0.45); font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; text-align:center;">
+    <div style="font-size:36px; margin-bottom:8px;">📄</div>
+    <div style="font-size:18px; font-weight:800; color:#0f172a; margin-bottom:4px;">Hisab Statement PDF Ready!</div>
+    <div style="font-size:12px; color:#475569; margin-bottom:18px; line-height:1.4;">
+      Statement PDF generate ho chuka hai. WhatsApp par bhejne ke liye neeche diye gaye option par tap karein:
+    </div>
+
+    <!-- Option 1: Native Share to WhatsApp (Passes PDF file directly) -->
+    <button
+      onclick="handleDirectNativeShare()"
+      style="width:100%; padding:13px 16px; background:#25D366; color:#ffffff; border:none; border-radius:8px; font-size:14px; font-weight:bold; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; margin-bottom:10px; box-shadow:0 3px 8px rgba(37,211,102,0.35);"
+    >
+      <span>💬</span> <span>WhatsApp Par PDF File Bhejein</span>
+    </button>
+
+    <!-- Option 2: Direct Party Chat with statement link -->
+    <a
+      href="${whatsappDirectUrl}"
+      target="_blank"
+      rel="noreferrer"
+      style="width:100%; padding:11px 16px; background:#075e54; color:#ffffff; text-decoration:none; border-radius:8px; font-size:13px; font-weight:bold; display:flex; align-items:center; justify-content:center; gap:8px; margin-bottom:10px; box-sizing:border-box;"
+    >
+      <span>📲</span> <span>Party Chat Khulein (${whatsappPhone || party.name})</span>
+    </a>
+
+    <!-- Option 3: Download PDF -->
+    <button
+      onclick="handleModalDownloadPdf()"
+      style="width:100%; padding:10px 16px; background:#f1f5f9; color:#334155; border:1px solid #cbd5e1; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; margin-bottom:14px;"
+    >
+      <span>📥</span> <span>Download / Save PDF to Device</span>
+    </button>
+
+    <button
+      onclick="document.getElementById('whatsapp-share-modal').style.display='none'"
+      style="background:none; border:none; color:#64748b; font-size:12px; cursor:pointer; text-decoration:underline;"
+    >
+      ✕ Band Karein (Close)
+    </button>
+  </div>
+</div>
 
 <div class="no-print">
   <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
@@ -962,6 +1074,7 @@ async function shareWhatsAppPdf() {
   Computer-generated statement of account. Not a tax invoice.
 </div>
 
+<div class="doc-scroll-wrapper">
 <div id="statement-doc">
   <!-- Center Background Watermark (100% round circle emblem with soft delicate opacity) -->
   <div class="watermark-container">
@@ -1056,6 +1169,7 @@ async function shareWhatsAppPdf() {
     />
     <div class="disclaimer-line" style="display: none;">Computer-generated statement of account. Not a tax invoice.</div>
   </div>
+</div>
 </div>
 
 </body>
