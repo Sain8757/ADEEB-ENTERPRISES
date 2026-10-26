@@ -135,6 +135,45 @@ export default function AppShell({
           )}
           <div className="status-panel">{time}</div>
         </div>
+
+        {/* ── MOBILE BOTTOM NAVIGATION (iPhone & Android thumb navigation) ── */}
+        <nav className="mobile-bottom-nav">
+          <Link
+            href="/dashboard"
+            className={`mobile-nav-item ${pathname === "/dashboard" ? "active" : ""}`}
+          >
+            <span className="mobile-nav-icon">🏠</span>
+            <span className="mobile-nav-label">Home</span>
+          </Link>
+          <Link
+            href="/parties"
+            className={`mobile-nav-item ${pathname?.startsWith("/parties") || pathname?.startsWith("/ledger") ? "active" : ""}`}
+          >
+            <span className="mobile-nav-icon">👥</span>
+            <span className="mobile-nav-label">Parties</span>
+          </Link>
+          <Link
+            href="/purchases/new"
+            className={`mobile-nav-item mobile-nav-action ${pathname === "/purchases/new" ? "active" : ""}`}
+          >
+            <span className="mobile-nav-icon">➕</span>
+            <span className="mobile-nav-label">Kharid</span>
+          </Link>
+          <Link
+            href="/reports"
+            className={`mobile-nav-item ${pathname?.startsWith("/reports") ? "active" : ""}`}
+          >
+            <span className="mobile-nav-icon">📊</span>
+            <span className="mobile-nav-label">Reports</span>
+          </Link>
+          <Link
+            href="/settings"
+            className={`mobile-nav-item ${pathname === "/settings" ? "active" : ""}`}
+          >
+            <span className="mobile-nav-icon">⚙️</span>
+            <span className="mobile-nav-label">Settings</span>
+          </Link>
+        </nav>
       </div>
     </div>
   );

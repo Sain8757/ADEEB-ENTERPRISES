@@ -820,28 +820,157 @@ html, body {
 }
 
 /* ═══════════════════════════════════════════════════════
-   RESPONSIVE OVERRIDES
+   MOBILE & RESPONSIVE (All iPhones & Android Devices)
 ═══════════════════════════════════════════════════════ */
+
+/* Mobile Bottom Navigation Bar (Hidden on desktop) */
+.mobile-bottom-nav {
+  display: none;
+}
 
 @media (max-width: 768px) {
   .sidebar {
-    width: 120px;
+    width: 130px;
   }
   .win95-table td,
   .win95-table th {
-    padding: 2px 4px;
-    font-size: 10px;
-  }
-  .workspace {
-    padding: 2px;
+    padding: 3px 5px;
+    font-size: 11px;
   }
 }
 
-@media (max-width: 480px) {
-  .sidebar {
+@media (max-width: 640px) {
+  /* Dynamic viewport height on iPhone & Android */
+  .desktop {
+    height: 100dvh;
+    min-height: 100dvh;
+    overflow: hidden;
+  }
+
+  .win-window {
+    height: 100%;
+    border: none;
+  }
+
+  .title-bar {
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+
+  .title-btn {
     display: none;
   }
-  .toolbar-btn span.label {
+
+  /* Hide left desktop sidebar on mobile in favor of bottom bar */
+  .sidebar {
+    display: none !important;
+  }
+
+  /* Horizontal scrollable quick toolbar at top */
+  .toolbar {
+    padding: 3px 4px;
+    gap: 4px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-bottom: 2px solid var(--win95-border-dark);
+  }
+  .toolbar-btn {
+    padding: 4px 8px;
+    font-size: 11px;
+    flex-shrink: 0;
+    min-height: 28px;
+  }
+  .toolbar-separator {
+    display: none;
+  }
+
+  /* Workspace full height scroll */
+  .workspace {
+    padding: 6px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Responsive tables with smooth touch swipe */
+  .table-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin-bottom: 8px;
+  }
+  .win95-table {
+    min-width: 520px;
+  }
+
+  /* Mobile bottom navigation bar for all iPhones & Android */
+  .mobile-bottom-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    background: #000080; /* Windows 95 signature navy */
+    border-top: 2px solid #808080;
+    padding: 4px 6px;
+    padding-bottom: max(6px, env(safe-area-inset-bottom));
+    flex-shrink: 0;
+    z-index: 1000;
+  }
+
+  .mobile-nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #ffffff;
+    text-decoration: none;
+    font-size: 10px;
+    padding: 3px 6px;
+    border-radius: 4px;
+    flex: 1;
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+
+  .mobile-nav-item.active {
+    background: #000050;
+    color: #ffff00;
+    font-weight: bold;
+  }
+
+  .mobile-nav-icon {
+    font-size: 17px;
+    line-height: 1.1;
+  }
+
+  .mobile-nav-label {
+    font-size: 9.5px;
+    margin-top: 1px;
+  }
+
+  .mobile-nav-action {
+    background: #059669;
+    border-radius: 6px;
+    color: #fff;
+    font-weight: bold;
+  }
+  .mobile-nav-action:active {
+    background: #047857;
+  }
+
+  /* Touch-friendly modals on small screens */
+  .modal-window {
+    width: 95vw !important;
+    max-width: 95vw !important;
+    max-height: 90vh !important;
+  }
+
+  /* Prevent awkward iOS Safari zoom on input focus */
+  .win95-input,
+  .win95-select {
+    font-size: 14px;
+  }
+
+  /* Hide bottom desktop status bar on phone */
+  .status-bar {
     display: none;
   }
 }
