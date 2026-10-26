@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import Decimal from 'decimal.js';
+import { ADEEB_LOGO_BASE64 } from '@/lib/logo';
 
 export async function GET(
   req: NextRequest,
@@ -673,12 +674,62 @@ table.statement-table tfoot td:last-child {
   color: #64748b;
 }
 
+/* Center Background Watermark */
+.watermark-container {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 440px;
+  max-width: 70vw;
+  height: 440px;
+  max-height: 70vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 0;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.watermark-logo {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  opacity: 0.07; /* Soft & subtle watermark: logo is clearly visible, yet all numbers, text & lines stay 100% visible */
+}
+
+/* Ensure all statement content sits cleanly on top of watermark */
+.header-wrapper,
+table.statement-table,
+.summary-container,
+.doc-footer {
+  position: relative;
+  z-index: 1;
+}
+
+table.statement-table tbody td {
+  background: transparent;
+}
+
 @media print {
   body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
   .no-print { display: none !important; }
   table.statement-table tr { page-break-inside: avoid; }
   .summary-container { page-break-inside: avoid; }
   .doc-footer { page-break-inside: avoid; }
+  .watermark-container {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+  }
+  .watermark-logo {
+    opacity: 0.07 !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
 }
 
 @media screen {
@@ -740,11 +791,21 @@ function downloadPdfFile() {
   Computer-generated statement of account. Not a tax invoice.
 </div>
 
+<!-- Center Background Watermark (Delicate opacity so all content is 100% visible) -->
+<div class="watermark-container">
+  <img src="${ADEEB_LOGO_BASE64}" class="watermark-logo" alt="Watermark" />
+</div>
+
 <!-- Header -->
 <div class="header-wrapper">
   <div class="header-left">
-    <div class="biz-name">${business?.name ?? 'FQ TRADING'}</div>
-    <div class="biz-phone">${business?.mobile ?? '9205658103'}</div>
+    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+      <img src="${ADEEB_LOGO_BASE64}" style="width: 48px; height: 48px; border-radius: 50%; object-fit: cover; border: 1.5px solid #d4af37; box-shadow: 0 1px 4px rgba(0,0,0,0.2);" alt="Logo" />
+      <div>
+        <div class="biz-name">${business?.name ?? 'ADEEB ENTERPRISES'}</div>
+        <div class="biz-phone">${business?.mobile ?? '7050047146'}</div>
+      </div>
+    </div>
 
     <div class="bill-to-label">BILL TO</div>
     <div class="party-name">${party.name}</div>
