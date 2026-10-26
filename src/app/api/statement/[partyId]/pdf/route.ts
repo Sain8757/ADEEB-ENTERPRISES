@@ -1,6 +1,5 @@
 // ADEEB ENTERPRISES — Account Statement PDF Generator API
-// Generates A4 portrait statement using print-ready HTML with CSS @page footer
-// Disclaimer appears on EVERY page via CSS running elements / fixed footer technique.
+// Generates statement exactly matching the reference design layout.
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
@@ -13,7 +12,7 @@ export async function GET(
 ) {
   const { partyId } = await params;
   const session = await auth();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!session || !session.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { searchParams } = new URL(req.url);
   const from = searchParams.get('from');
@@ -61,6 +60,13 @@ export async function GET(
     (s, p) => s.plus(new Decimal(p.totalWeight.toString())), new Decimal(0)
   );
 
+  // Category weight breakdown (B/C, S/C, V/C)
+  const catWeightMap: Record<string, Decimal> = {};
+  for (const p of purchases) {
+    const cat = p.category === 'BC' ? 'B/C' : p.category === 'SC' ? 'S/C' : 'V/C';
+    catWeightMap[cat] = (catWeightMap[cat] ?? new Decimal(0)).plus(new Decimal(p.totalWeight.toString()));
+  }
+
   // Payment method breakdown
   const methodBreakdown: Record<string, Decimal> = {};
   for (const p of payments) {
@@ -70,18 +76,10 @@ export async function GET(
     }
   }
 
-  const cashExpenses = payments
-    .filter(p => p.cashExExpense && !p.cashExExpense.reversed)
-    .map(p => p.cashExExpense!);
-  const totalCashEx = cashExpenses.reduce(
-    (s, e) => s.plus(new Decimal(e.expenseAmount.toString())), new Decimal(0)
-  );
-
-  // Closing balance
+  // Closing balance (Signed math matching reference format)
+  // CR = negative (payable / credit), DR = positive (receivable)
   const openingSigned = openingDir === 'DR' ? openingBalance : openingBalance.neg();
   const closingSigned = openingSigned.plus(totalPurchases).minus(totalPayments).plus(totalPaid);
-  const closingBalance = closingSigned.abs();
-  const closingDir = closingSigned.isZero() ? 'NIL' : closingSigned.gt(0) ? 'DR' : 'CR';
 
   const statementHtml = generateStatementHtml({
     business,
@@ -90,20 +88,15 @@ export async function GET(
     payments,
     from,
     to,
-    openingBalance: openingBalance.toFixed(2),
-    openingDir,
-    closingBalance: closingBalance.toFixed(2),
-    closingDir,
-    totalPurchases: totalPurchases.toFixed(2),
-    totalPayments: totalPayments.toFixed(2),
-    totalPaid: totalPaid.toFixed(2),
+    openingSigned,
+    closingSigned,
+    totalPurchases,
+    totalPayments,
+    totalPaid,
     totalQty,
-    totalWeight: totalWeight.toFixed(1),
-    methodBreakdown: Object.fromEntries(
-      Object.entries(methodBreakdown).map(([k, v]) => [k, v.toFixed(2)])
-    ),
-    totalCashEx: totalCashEx.toFixed(2),
-    generatedAt: new Date().toISOString(),
+    totalWeight,
+    catWeightMap,
+    methodBreakdown,
   });
 
   return new NextResponse(statementHtml, {
@@ -114,25 +107,61 @@ export async function GET(
   });
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Formatters ───────────────────────────────────────────────────────────────
 
-function fmtINR(v: string | number): string {
-  const n = parseFloat(String(v));
-  if (isNaN(n)) return '₹0.00';
-  const abs = Math.abs(n).toFixed(2);
-  const [i, d] = abs.split('.');
+function fmtNum(v: Decimal | string | number, decimals = 0): string {
+  const n = typeof v === 'object' && 'toNumber' in v ? (v as Decimal).toNumber() : parseFloat(String(v));
+  if (isNaN(n)) return '0';
+  const absStr = Math.abs(n).toFixed(decimals);
+  const [i, d] = absStr.split('.');
   const groups: string[] = [];
   let rest = i;
   if (rest.length > 3) { groups.unshift(rest.slice(-3)); rest = rest.slice(0, -3); }
   while (rest.length > 2) { groups.unshift(rest.slice(-2)); rest = rest.slice(0, -2); }
   if (rest) groups.unshift(rest);
-  return `₹${groups.join(',')}.${d}`;
+  const formatted = groups.join(',');
+  return decimals > 0 && d ? `${formatted}.${d}` : formatted;
 }
 
-function fmtDate(d: Date | string): string {
-  return new Date(d).toLocaleDateString('en-IN', {
-    day: '2-digit', month: 'short', year: 'numeric',
-  });
+function fmtBalWithSymbol(v: Decimal): string {
+  const isNeg = v.isNegative();
+  const numStr = fmtNum(v.abs(), 0);
+  return isNeg ? `-₹${numStr}` : `₹${numStr}`;
+}
+
+function fmtBalFullDecimal(v: Decimal): string {
+  const isNeg = v.isNegative();
+  const numStr = fmtNum(v.abs(), 2);
+  return isNeg ? `-₹${numStr}` : `₹${numStr}`;
+}
+
+function fmtDateShort(d: Date | string): string {
+  const dt = new Date(d);
+  const day = dt.getDate();
+  const month = dt.toLocaleString('en-IN', { month: 'short' });
+  return `${day} ${month}`;
+}
+
+function fmtDateRange(from?: string | null, to?: string | null, purchases: any[] = []): string {
+  if (from && to) {
+    const f = new Date(from);
+    const t = new Date(to);
+    return `${f.getDate()} ${f.toLocaleString('en-IN', { month: 'short' })} — ${t.getDate()} ${t.toLocaleString('en-IN', { month: 'short' })} ${t.getFullYear()}`;
+  }
+  if (purchases.length > 0) {
+    const f = new Date(purchases[0].date);
+    const t = new Date(purchases[purchases.length - 1].date);
+    return `${f.getDate()} ${f.toLocaleString('en-IN', { month: 'short' })} — ${t.getDate()} ${t.toLocaleString('en-IN', { month: 'short' })} ${t.getFullYear()}`;
+  }
+  return 'All dates';
+}
+
+function fmtIsoDate(d: Date | string): string {
+  const dt = new Date(d);
+  const year = dt.getFullYear();
+  const month = String(dt.getMonth() + 1).padStart(2, '0');
+  const day = String(dt.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 // ── HTML Template ─────────────────────────────────────────────────────────────
@@ -141,75 +170,117 @@ function generateStatementHtml(data: any): string {
   const {
     business, party, purchases, payments,
     from, to,
-    openingBalance, openingDir,
-    closingBalance, closingDir,
-    totalPurchases, totalPayments, totalPaid,
+    openingSigned, closingSigned,
+    totalPurchases, totalPayments,
     totalQty, totalWeight,
-    methodBreakdown, totalCashEx, generatedAt,
+    catWeightMap, methodBreakdown,
   } = data;
 
-  // Combined sorted row list
+  const DISCLAIMER = 'Computer-generated statement of account. Not a tax invoice.';
+
+  // Build sorted combined rows
   type Row = { date: Date; isPayment: boolean; p?: any; pay?: any };
   const allRows: Row[] = [
     ...purchases.map((p: any) => ({ date: p.date, isPayment: false, p })),
     ...payments.map((p: any) => ({ date: p.date, isPayment: true, pay: p })),
   ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
+  // Extract receipt numbers
+  const receiptNos = purchases
+    .map((p: any) => p.receiptNo)
+    .filter((r: any) => !!r);
+  const uniqueReceipts = Array.from(new Set(receiptNos)).join(',');
+
+  // Build table body rows
   const tableRows = allRows.map(row => {
     if (!row.isPayment) {
       const p = row.p;
       const cat = p.category === 'BC' ? 'B/C' : p.category === 'SC' ? 'S/C' : 'V/C';
+      
+      const subParts: string[] = [];
+      if (p.notes) subParts.push(p.notes);
+      if (p.receiptNo) subParts.push(`Receipt ${p.receiptNo}`);
+
+      const subHtml = subParts.length > 0 
+        ? `<div class="sub-text">${subParts.join(' · ')}</div>` 
+        : '';
+
       return `<tr>
-        <td>${fmtDate(p.date)}</td>
-        <td class="num">${p.qty}</td>
-        <td>${cat}</td>
-        <td class="num">${parseFloat(p.totalWeight).toFixed(1)}</td>
-        <td class="num">${parseFloat(p.avgWeight).toFixed(2)}</td>
-        <td class="num">${parseFloat(p.rate).toFixed(2)}</td>
-        <td class="num">${fmtINR(p.amount)}</td>
-        <td></td>
+        <td class="col-date">
+          <div class="main-date">${fmtDateShort(p.date)}</div>
+          ${subHtml}
+        </td>
+        <td class="col-qty">${p.qty}</td>
+        <td class="col-cat">${cat}</td>
+        <td class="col-weight">${fmtNum(p.totalWeight, 1)}</td>
+        <td class="col-avg">${fmtNum(p.avgWeight, 2)}</td>
+        <td class="col-rate">${fmtNum(p.rate, 0)}</td>
+        <td class="col-amount">${fmtNum(p.amount, 0)}</td>
+        <td class="col-payment"></td>
       </tr>`;
     } else {
       const pay = row.pay;
       if (pay.direction !== 'RECEIVED') return '';
-      const methodLabel: Record<string, string> = {
-        CASH: 'Cash', AC: 'A/C', ADVANCE_JAMA: 'Advance Jama', CASH_EX: 'Cash EX',
+
+      const methodLabels: Record<string, string> = {
+        CASH: 'Cash',
+        AC: 'A/C',
+        ADVANCE_JAMA: 'ADVANCE JAMA',
+        CASH_EX: 'CASH EX',
       };
-      const method = methodLabel[pay.method] ?? pay.method;
+      const mLabel = methodLabels[pay.method] ?? pay.method;
+
+      const subParts: string[] = [mLabel];
+      if (pay.notes) subParts.push(pay.notes);
+      if (pay.bankRef) subParts.push(pay.bankRef);
+
       return `<tr>
-        <td>${fmtDate(pay.date)}</td>
-        <td></td><td></td><td></td><td></td><td></td>
-        <td></td>
-        <td class="num pay">${fmtINR(pay.amount)}<br><small style="color:#666">${method}</small></td>
+        <td class="col-date">
+          <div class="main-date">${fmtDateShort(pay.date)}</div>
+          <div class="sub-text">${subParts.join(' · ')}</div>
+        </td>
+        <td class="col-qty"></td>
+        <td class="col-cat"></td>
+        <td class="col-weight"></td>
+        <td class="col-avg"></td>
+        <td class="col-rate"></td>
+        <td class="col-amount"></td>
+        <td class="col-payment green-val">${fmtNum(pay.amount, 0)}</td>
       </tr>`;
     }
   }).join('');
 
-  const methodRows = Object.entries(methodBreakdown)
-    .map(([m, v]) => {
-      const label: Record<string, string> = {
-        CASH: 'Cash', AC: 'A/C', ADVANCE_JAMA: 'Advance Jama', CASH_EX: 'Cash EX',
-      };
-      return `<div>${label[m] ?? m}: ${fmtINR(v as string)}</div>`;
-    }).join('');
+  // Loads & Category breakdown line
+  const loadCount = purchases.length;
+  const catParts = Object.entries(catWeightMap).map(([c, w]) => `${c} ${fmtNum(w as Decimal, 1)}`);
+  const loadsLine = `Closing balance · ${loadCount} loads · ${fmtNum(totalWeight, 1)} total${catParts.length > 0 ? ' · ' + catParts.join(' · ') : ''}`;
 
-  const periodStr = from && to
-    ? `${fmtDate(from)} to ${fmtDate(to)}`
-    : 'All dates';
+  // Payment methods line
+  const methodLabels: Record<string, string> = {
+    CASH: 'Cash',
+    AC: 'A/C',
+    ADVANCE_JAMA: 'ADVANCE JAMA',
+    CASH_EX: 'CASH EX',
+  };
+  const methodParts = Object.entries(methodBreakdown).map(
+    ([m, val]) => `${methodLabels[m] ?? m} ${fmtNum(val as Decimal, 0)}`
+  );
+  const methodsLine = methodParts.join('  ·  ');
 
-  const cashExSection = parseFloat(totalCashEx) > 0 ? `
-<div class="cashex-note">
-  <strong>&#x1F4B8; Cash EX Expense (separate business expense — not deducted from party payments):</strong>
-  Total Cash EX: ${fmtINR(totalCashEx)}
-  <br>This amount is recorded in the business expense ledger separately and does NOT affect the above party balance.
-</div>` : '';
+  // Date range formatted
+  const periodBoxStr = fmtDateRange(from, to, purchases);
+  const periodSubStr = from && to 
+    ? `${fmtIsoDate(from)} to ${fmtIsoDate(to)}`
+    : purchases.length > 0
+      ? `${fmtIsoDate(purchases[0].date)} to ${fmtIsoDate(purchases[purchases.length - 1].date)}`
+      : 'All dates';
 
-  // ── DISCLAIMER TEXT (single source of truth) ─────────────────────────────
-  // This string is used in BOTH the @page CSS running element (all pages)
-  // and the visible end-of-document footer section.
-  const DISCLAIMER = 'Computer-generated statement of account. Not a tax invoice.';
-  const businessFooter = business?.statementFooter
-    ?? 'Amounts you record. Not calculated, filed or verified by this app.';
+  // Math expression numbers
+  const openingSignPrefix = openingSigned.isNegative() ? '-' : '';
+  const openingFormulaStr = `${openingSignPrefix}${fmtNum(openingSigned.abs(), 2)}`;
+  const purchasesFormulaStr = fmtNum(totalPurchases, 2);
+  const paymentsFormulaStr = fmtNum(totalPayments, 2);
+  const closingResultStr = fmtBalFullDecimal(closingSigned);
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -218,308 +289,396 @@ function generateStatementHtml(data: any): string {
 <title>Account Statement — ${party.name}</title>
 <style>
 
-/* ── PAGE SETUP ─────────────────────────────────────────────────────────────
-   Reserve 14mm at the bottom of every printed page so the fixed-position
-   footer (disclaimer) never overlaps content.
-   @bottom-center is supported by Chromium / WebKit print engines used when
-   the user clicks "Print / Save as PDF".
-*/
 @page {
   size: A4 portrait;
-  margin: 15mm 15mm 28mm 15mm;   /* extra bottom margin for disclaimer footer */
+  margin: 14mm 15mm 28mm 15mm;
 
-  /* CSS Paged Media: @bottom-center running element — works in Chrome/Edge/Safari */
   @bottom-center {
     content: element(page-footer);
     vertical-align: top;
   }
 }
 
-/* ── RUNNING FOOTER ELEMENT (CSS Paged Media) ───────────────────────────────
-   position:running() is a CSS Paged Media spec that Chrome/Edge/Safari
-   respect when printing.  The element is taken out of normal flow and
-   stamped into @bottom-center on every page.
-   Fallback: the .page-footer-fixed element below covers non-paged-media browsers.
-*/
 #running-footer {
   position: running(page-footer);
   width: 100%;
-  border-top: 1px solid #bbb;
-  padding-top: 4px;
   text-align: center;
-  font-family: Arial, sans-serif;
-  font-size: 8.5px;
-  color: #555;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 9px;
+  color: #64748b;
   line-height: 1.4;
+  padding-top: 8px;
 }
 
-/* ── BODY & BASE ────────────────────────────────────────────────────────────*/
 body {
-  font-family: Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   font-size: 11px;
-  color: #000;
+  color: #0f172a;
   background: #fff;
   margin: 0;
   padding: 0;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* ── SCREEN-ONLY TOOLBAR (hidden in print) ──────────────────────────────────*/
-.no-print { display: block; }
+/* Screen toolbar */
+.no-print {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: #f1f5f9;
+  border-bottom: 1px solid #cbd5e1;
+}
+.print-btn {
+  padding: 7px 18px;
+  background: #0f172a;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+.print-btn:hover { background: #1e293b; }
+.close-btn {
+  padding: 7px 16px;
+  background: #e2e8f0;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
 
-/* ── PAGE HEADER ─────────────────────────────────────────────────────────────*/
-.header {
+/* Header Section */
+.header-wrapper {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  border-bottom: 2px solid #0a1628;
-  padding-bottom: 8px;
-  margin-bottom: 12px;
-}
-.biz-name { font-size: 20px; font-weight: bold; color: #0a1628; }
-.biz-sub  { font-size: 11px; color: #444; }
-.summary  { text-align: right; min-width: 180px; }
-.summary table { width: 100%; border-collapse: collapse; }
-.summary td { padding: 2px 4px; font-size: 11px; }
-.summary td:last-child { text-align: right; font-weight: bold; }
-
-/* ── PARTY INFO ──────────────────────────────────────────────────────────────*/
-.party-info { margin-bottom: 8px; }
-.party-name { font-size: 16px; font-weight: bold; color: #0a1628; }
-.statement-title {
-  text-align: center;
-  font-size: 13px;
-  font-weight: bold;
-  letter-spacing: 1px;
-  margin: 8px 0;
-  border-top: 1px solid #ccc;
-  border-bottom: 1px solid #ccc;
-  padding: 4px 0;
+  margin-top: 10px;
+  margin-bottom: 22px;
 }
 
-/* ── MAIN TRANSACTION TABLE ──────────────────────────────────────────────────*/
-table.main { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
-table.main th {
-  background: #0a1628;
-  color: #fff;
-  padding: 4px 6px;
+.header-left {
+  flex: 1;
+}
+
+.biz-name {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: #000000;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+.biz-phone {
+  font-size: 12px;
+  color: #334155;
+  margin-top: 4px;
+  margin-bottom: 18px;
+}
+
+.bill-to-label {
   font-size: 10px;
-  text-align: left;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  color: #64748b;
+  text-transform: uppercase;
+  margin-bottom: 2px;
 }
-table.main th.num { text-align: right; }
-table.main td {
-  border: 1px solid #ddd;
-  padding: 3px 6px;
-  font-size: 10px;
+.party-name {
+  font-size: 18px;
+  font-weight: 800;
+  color: #000000;
+  text-transform: uppercase;
+  line-height: 1.2;
 }
-table.main td.num, table.main td.pay { text-align: right; }
-table.main td.pay { color: #008000; font-weight: bold; }
+.meta-line {
+  font-size: 11px;
+  color: #334155;
+  margin-top: 2px;
+}
 
-/* ── TOTALS SECTION ──────────────────────────────────────────────────────────*/
-.totals {
+/* Top Right Stat Box */
+.stat-box {
+  width: 310px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+}
+.stat-row {
   display: flex;
   justify-content: space-between;
-  margin-top: 8px;
-  border-top: 2px solid #0a1628;
-  padding-top: 6px;
+  align-items: center;
+  padding: 6px 12px;
+  border-bottom: 1px solid #e2e8f0;
 }
-.totals div { font-size: 11px; }
-.balance-box { text-align: right; }
-.balance-label { font-size: 10px; color: #666; }
-.balance-val { font-size: 18px; font-weight: bold; }
-
-/* ── CASH EX NOTE ────────────────────────────────────────────────────────────*/
-.cashex-note {
-  margin-top: 8px;
-  padding: 4px 8px;
-  background: #f9f9f9;
-  border: 1px solid #ddd;
+.stat-row:last-child {
+  border-bottom: none;
+}
+.stat-label {
   font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  color: #475569;
+  text-transform: uppercase;
+}
+.stat-val {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+  text-align: right;
+  font-feature-settings: "tnum";
+  font-variant-numeric: tabular-nums;
+}
+.stat-val.closing {
+  font-size: 18px;
+  font-weight: 900;
+  color: #000000;
+}
+.stat-val.period-text {
+  font-size: 11px;
+  font-weight: 500;
+  color: #334155;
 }
 
-/* ── END-OF-DOCUMENT FOOTER (visible on screen + last printed page) ──────────
-   This is the visible footer at the bottom of the HTML document.
-   It also acts as the fallback for browsers/engines that don't support
-   CSS Paged Media running elements.
-   It is NOT the per-page disclaimer — that is handled by #running-footer above.
-*/
-.doc-footer {
-  margin-top: 20px;
-  border-top: 1px solid #ccc;
-  padding-top: 8px;
+/* Table */
+table.statement-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-feature-settings: "tnum";
+  font-variant-numeric: tabular-nums;
+}
+
+table.statement-table thead th {
+  background: #e2e8f0;
+  color: #334155;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  padding: 7px 8px;
+  border-right: 1px solid #cbd5e1;
+}
+table.statement-table thead th:last-child {
+  border-right: none;
+}
+
+table.statement-table tbody td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #f1f5f9;
+  border-right: 1px solid #e2e8f0;
+  vertical-align: top;
+}
+table.statement-table tbody td:last-child {
+  border-right: none;
+}
+
+.col-date { width: 25%; text-align: left; }
+.col-qty { width: 6%; text-align: right; font-weight: 600; }
+.col-cat { width: 7%; text-align: center; color: #475569; }
+.col-weight { width: 10%; text-align: right; font-weight: 600; }
+.col-avg { width: 9%; text-align: right; color: #475569; }
+.col-rate { width: 8%; text-align: right; font-weight: 600; }
+.col-amount { width: 17%; text-align: right; font-weight: 600; }
+.col-payment { width: 18%; text-align: right; font-weight: 700; }
+
+.main-date {
+  font-weight: 700;
+  font-size: 11px;
+  color: #0f172a;
+}
+.sub-text {
   font-size: 9px;
-  color: #555;
+  color: #64748b;
+  margin-top: 2px;
 }
-.doc-footer .disclaimer-line {
-  text-align: center;
-  font-size: 9px;
-  font-weight: bold;
-  color: #333;
-  margin-bottom: 4px;
-  letter-spacing: 0.3px;
+.green-val {
+  color: #15803d;
+  font-size: 12px;
 }
-.doc-footer .generated-line {
-  text-align: center;
-  font-size: 8px;
-  color: #888;
+
+/* Table Footer / Totals Row */
+table.statement-table tfoot td {
+  padding: 8px 8px;
+  border-top: 2px solid #000000;
+  border-bottom: 2px solid #000000;
+  border-right: 1px solid #e2e8f0;
+  font-weight: 800;
 }
-.doc-footer .business-footer-line {
-  text-align: center;
-  font-size: 8.5px;
-  color: #666;
+table.statement-table tfoot td:last-child {
+  border-right: none;
+}
+.total-label {
+  font-size: 10px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+
+/* Bottom Calculation & Summary Section */
+.summary-container {
+  margin-top: 22px;
+  text-align: right;
+  font-feature-settings: "tnum";
+  font-variant-numeric: tabular-nums;
+}
+
+.formula-row {
+  display: flex;
+  justify-content: flex-end;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.formula-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  color: #475569;
+  text-transform: uppercase;
+}
+.formula-expr {
+  font-size: 12px;
+  color: #334155;
+  font-weight: 500;
+}
+.formula-closing {
+  font-size: 20px;
+  font-weight: 900;
+  color: #000000;
+  letter-spacing: -0.2px;
+}
+
+.loads-breakdown {
+  font-size: 10.5px;
+  color: #475569;
+  margin-top: 4px;
+}
+.methods-breakdown {
+  font-size: 10.5px;
+  color: #475569;
   margin-top: 3px;
 }
+.app-footer-note {
+  font-size: 9px;
+  color: #64748b;
+  margin-top: 4px;
+}
 
-/* ── PRINT RULES ─────────────────────────────────────────────────────────────*/
+/* Document Footer Disclaimer */
+.doc-footer {
+  margin-top: 34px;
+  text-align: center;
+}
+.doc-footer .disclaimer-line {
+  font-size: 9px;
+  color: #64748b;
+}
+
 @media print {
   body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
   .no-print { display: none !important; }
-
-  /* Prevent table row orphans — keep at least 2 rows together */
-  table.main tr { page-break-inside: avoid; }
-
-  /* Keep the totals+balance block together on a page */
-  .totals { page-break-inside: avoid; }
-  .cashex-note { page-break-inside: avoid; }
-
-  /* The doc-footer should not be orphaned at the very top of a new page */
+  table.statement-table tr { page-break-inside: avoid; }
+  .summary-container { page-break-inside: avoid; }
   .doc-footer { page-break-inside: avoid; }
-
-  /* Ensure the per-page running footer placeholder is hidden in flow */
-  #running-footer { display: block; }
 }
 
-/* ── SCREEN ONLY: simulate footer bar at bottom ─────────────────────────────*/
 @media screen {
-  /* On screen, show a sticky-style footer preview below the content */
-  #running-footer {
-    display: none; /* hidden on screen; only meaningful in print engine */
-  }
+  #running-footer { display: none; }
+  body { padding: 20px; max-width: 900px; margin: 0 auto; }
 }
-
-/* ── PRINT BUTTON ────────────────────────────────────────────────────────────*/
-.print-btn {
-  padding: 6px 16px;
-  background: #0a1628;
-  color: #fff;
-  border: none;
-  cursor: pointer;
-  font-size: 12px;
-}
-.print-btn:hover { background: #1a2638; }
 
 </style>
 </head>
 <body>
 
-<!-- ── SCREEN TOOLBAR (hidden when printing) ───────────────────────────── -->
-<div class="no-print" style="padding:8px;background:#c0c0c0;display:flex;gap:8px;border-bottom:2px solid #808080;align-items:center">
-  <button class="print-btn" onclick="window.print()">&#x1F5A8;&#xFE0F; Print / Save as PDF</button>
-  <button class="print-btn" style="background:#808080" onclick="window.close()">&#x2715; Close</button>
-  <span style="font-size:11px;color:#333;margin-left:8px;">
-    Tip: In the print dialog choose <strong>Save as PDF</strong> and enable <em>Background graphics</em> for best results.
+<div class="no-print">
+  <button class="print-btn" onclick="window.print()">🖨️ Print / Save as PDF</button>
+  <button class="close-btn" onclick="window.close()">✕ Close</button>
+  <span style="font-size: 11px; color: #64748b; margin-left: 10px;">
+    Tip: For exact look, ensure <em>Background graphics</em> is checked in print dialog.
   </span>
 </div>
 
-<!-- ── RUNNING FOOTER: appears on EVERY printed page via CSS @bottom-center ─
-     This element is consumed by the @page { @bottom-center { content: element(page-footer) } }
-     rule above. Chromium, WebKit (Safari), and most headless PDF renderers
-     that support CSS Paged Media Level 3 will stamp this on every page.
-     It is invisible on screen (display:none in @media screen above).
--->
 <div id="running-footer">
-  <strong>Computer-generated statement of account. Not a tax invoice.</strong>
-  &nbsp;&nbsp;|&nbsp;&nbsp;
-  ${business?.name ?? 'ADEEB ENTERPRISES'}
-  &nbsp;&nbsp;|&nbsp;&nbsp;
-  Generated: ${fmtDate(generatedAt)}
+  Computer-generated statement of account. Not a tax invoice.
 </div>
 
-<!-- ── DOCUMENT HEADER ─────────────────────────────────────────────────── -->
-<div class="header">
-  <div class="biz">
-    <div class="biz-name">${business?.name ?? 'ADEEB ENTERPRISES'}</div>
-    <div class="biz-sub">&#x1F4DE; ${business?.mobile ?? '7050047146'}</div>
-    ${business?.address ? `<div class="biz-sub">${business.address.replace(/\n/g, '<br>')}</div>` : ''}
+<!-- Header -->
+<div class="header-wrapper">
+  <div class="header-left">
+    <div class="biz-name">${business?.name ?? 'FQ TRADING'}</div>
+    <div class="biz-phone">${business?.mobile ?? '9205658103'}</div>
+
+    <div class="bill-to-label">BILL TO</div>
+    <div class="party-name">${party.name}</div>
+    ${uniqueReceipts ? `<div class="meta-line">Receipt no.: ${uniqueReceipts}</div>` : ''}
+    <div class="meta-line">Period: ${periodSubStr}</div>
   </div>
-  <div class="summary">
-    <table>
-      <tr><td>OPENING BAL.</td><td>${fmtINR(openingBalance)} ${openingDir}</td></tr>
-      <tr><td>CLOSING BAL.</td><td style="font-size:13px">${fmtINR(closingBalance)} ${closingDir}</td></tr>
-      <tr><td>PERIOD</td><td>${periodStr}</td></tr>
-    </table>
+
+  <div class="header-right">
+    <div class="stat-box">
+      <div class="stat-row">
+        <span class="stat-label">OPENING BAL.</span>
+        <span class="stat-val">${fmtBalWithSymbol(openingSigned)}</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">CLOSING BAL.</span>
+        <span class="stat-val closing">${fmtBalWithSymbol(closingSigned)}</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">PERIOD</span>
+        <span class="stat-val period-text">${periodBoxStr}</span>
+      </div>
+    </div>
   </div>
 </div>
 
-<!-- ── PARTY INFO ──────────────────────────────────────────────────────── -->
-<div class="party-info">
-  <div style="font-size:10px;color:#666">BILL TO</div>
-  <div class="party-name">${party.name}</div>
-  ${party.mobile ? `<div style="font-size:10px">&#x1F4DE; ${party.mobile}</div>` : ''}
-  ${party.address ? `<div style="font-size:10px;color:#555">${party.address}</div>` : ''}
-</div>
-
-<div class="statement-title">ACCOUNT STATEMENT</div>
-
-<!-- ── TRANSACTION TABLE ───────────────────────────────────────────────── -->
-<table class="main">
+<!-- Table -->
+<table class="statement-table">
   <thead>
     <tr>
-      <th>DATE</th><th class="num">QTY</th><th>CAT</th>
-      <th class="num">WEIGHT&nbsp;(kg)</th><th class="num">AVG.&nbsp;(kg)</th>
-      <th class="num">RATE&nbsp;(₹/kg)</th><th class="num">AMOUNT</th>
-      <th class="num">PAYMENT</th>
+      <th class="col-date">DATE</th>
+      <th class="col-qty">QTY</th>
+      <th class="col-cat">CAT</th>
+      <th class="col-weight">WEIGHT</th>
+      <th class="col-avg">AVG.</th>
+      <th class="col-rate">RATE</th>
+      <th class="col-amount">AMOUNT</th>
+      <th class="col-payment">PAYMENT</th>
     </tr>
   </thead>
-  <tbody>${tableRows}</tbody>
+  <tbody>
+    ${tableRows}
+  </tbody>
   <tfoot>
-    <tr style="background:#f5f5f5;font-weight:bold">
-      <td>TOTAL</td>
-      <td class="num">${totalQty}</td>
-      <td></td>
-      <td class="num">${totalWeight}</td>
-      <td></td><td></td>
-      <td class="num">${fmtINR(totalPurchases)}</td>
-      <td class="num" style="color:#008000">${fmtINR(totalPayments)}</td>
+    <tr>
+      <td class="col-date total-label">TOTAL</td>
+      <td class="col-qty">${totalQty}</td>
+      <td class="col-cat"></td>
+      <td class="col-weight">${fmtNum(totalWeight, 1)}</td>
+      <td class="col-avg"></td>
+      <td class="col-rate"></td>
+      <td class="col-amount">${fmtNum(totalPurchases, 0)}</td>
+      <td class="col-payment green-val">${fmtNum(totalPayments, 0)}</td>
     </tr>
   </tfoot>
 </table>
 
-<!-- ── TOTALS & CLOSING BALANCE ────────────────────────────────────────── -->
-<div class="totals">
-  <div>
-    <div><strong>Qty:</strong> ${totalQty} head | <strong>Weight:</strong> ${totalWeight} kg</div>
-    <div><strong>Purchases:</strong> ${fmtINR(totalPurchases)}</div>
-    <div><strong>Payments Received:</strong> ${fmtINR(totalPayments)}</div>
-    ${parseFloat(totalPaid) > 0 ? `<div><strong>Payments Made:</strong> ${fmtINR(totalPaid)}</div>` : ''}
-    <div style="margin-top:4px;font-size:10px;color:#666">${methodRows}</div>
+<!-- Bottom Summary -->
+<div class="summary-container">
+  <div class="formula-row">
+    <span class="formula-label">OPENING + AMOUNT − PAYMENT</span>
+    <span class="formula-expr">${openingFormulaStr} + ${purchasesFormulaStr} − ${paymentsFormulaStr} =</span>
+    <span class="formula-closing">${closingResultStr}</span>
   </div>
-  <div class="balance-box">
-    <div class="balance-label">OPENING + PURCHASES − PAYMENTS RECEIVED</div>
-    <div style="font-size:10px;color:#444">
-      ${fmtINR(openingBalance)} ${openingDir} + ${fmtINR(totalPurchases)} − ${fmtINR(totalPayments)}
-    </div>
-    <div class="balance-val"
-         style="color:${closingDir === 'DR' ? '#800000' : closingDir === 'CR' ? '#008000' : '#000'}">
-      ${fmtINR(closingBalance)} ${closingDir}
-    </div>
-  </div>
+  <div class="loads-breakdown">${loadsLine}</div>
+  ${methodsLine ? `<div class="methods-breakdown">${methodsLine}</div>` : ''}
+  <div class="app-footer-note">${business?.statementFooter ?? 'Amounts you record. Not calculated, filed or verified by this app.'}</div>
 </div>
 
-${cashExSection}
-
-<!-- ── END-OF-DOCUMENT FOOTER ──────────────────────────────────────────────
-     Visible at the bottom of the document on screen AND on the last printed
-     page. This is the human-readable footer the user sees when scrolling.
-     It also acts as the fallback disclaimer for PDF renderers that do not
-     support CSS Paged Media @bottom-center running elements.
-     The per-page disclaimer is in #running-footer above.
--->
 <div class="doc-footer">
-  <div class="disclaimer-line">
-    &#x26A0;&#xFE0F;&nbsp;&nbsp;Computer-generated statement of account. Not a tax invoice.
-  </div>
-  <div class="business-footer-line">${businessFooter}</div>
-  <div class="generated-line">Generated: ${fmtDate(generatedAt)} &nbsp;|&nbsp; ${business?.name ?? 'ADEEB ENTERPRISES'} &nbsp;|&nbsp; ${business?.mobile ?? '7050047146'}</div>
+  <div class="disclaimer-line">Computer-generated statement of account. Not a tax invoice.</div>
 </div>
 
 </body>
