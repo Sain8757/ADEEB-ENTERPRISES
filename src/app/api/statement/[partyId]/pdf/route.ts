@@ -6,6 +6,7 @@ import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import Decimal from 'decimal.js';
 import { ADEEB_LOGO_BASE64 } from '@/lib/logo';
+import { DISCLAIMER_STAMP_BASE64 } from '@/lib/stamp';
 
 export async function GET(
   req: NextRequest,
@@ -400,7 +401,9 @@ function generateStatementHtml(data: any): string {
 
   const whatsappText = `*${business?.name ?? 'ADEEB ENTERPRISES'}*\n*Hisab Statement — ${party.name}*\nPeriod: ${periodBoxStr}\n---------------------------------\nKharid (Purchases): ₹${fmtNum(totalPurchases, 0)} (${totalQty} Buffaloes, ${fmtNum(totalWeight, 1)} kg)\nJama (Payments): ₹${fmtNum(totalPayments, 0)}\n*Net Balance: ${fmtBalWithSymbol(closingSigned)}*\n---------------------------------\n📄 Online Statement PDF:\n${statementUrl}\n\nComputer-generated statement.`;
 
-  const whatsappDirectUrl = `https://api.whatsapp.com/send?${whatsappPhone ? `phone=${encodeURIComponent(whatsappPhone)}&` : ''}text=${encodeURIComponent(whatsappText)}`;
+  const whatsappDirectUrl = whatsappPhone
+    ? `https://wa.me/${whatsappPhone}?text=${encodeURIComponent(whatsappText)}`
+    : `https://api.whatsapp.com/send?text=${encodeURIComponent(whatsappText)}`;
   const safePartyName = (party.name || 'Party').replace(/'/g, "\\'").replace(/"/g, '\\"');
   const pdfFilename = `${(party.name || 'Statement').replace(/[^a-zA-Z0-9]/g, '_')}_Statement.pdf`;
 
@@ -833,10 +836,18 @@ async function generatePdfBlob() {
     throw new Error('PDF generator bundle not ready');
   }
   const opt = {
-    margin: [10, 10, 15, 10],
+    margin: [8, 10, 12, 10],
     filename: filename,
     image: { type: 'jpeg', quality: 0.98 },
-    html2canvas: { scale: 2, useCORS: true, letterRendering: true, backgroundColor: '#ffffff', scrollY: 0 },
+    html2canvas: {
+      scale: 1.8,
+      windowWidth: 1024,
+      useCORS: true,
+      letterRendering: true,
+      backgroundColor: '#ffffff',
+      scrollY: 0,
+      logging: false,
+    },
     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
   };
   return await html2pdf().set(opt).from(element).outputPdf('blob');
@@ -849,34 +860,35 @@ async function downloadPdfFile() {
 
   try {
     const blob = await generatePdfBlob();
-    const blobUrl = URL.createObjectURL(blob);
+    const file = new File([blob], filename, { type: 'application/pdf' });
 
-    // Standard download via hidden link
+    // On mobile (iOS Safari / Android Chrome):
+    // Use Web Share API if supported so user gets native "Save to Files", "WhatsApp", "Drive"
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({
+          title: filename,
+          files: [file]
+        });
+        return;
+      } catch (shareErr) {
+        if (shareErr.name === 'AbortError') return;
+      }
+    }
+
+    // Standard download fallback
+    const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = blobUrl;
     a.download = filename;
     document.body.appendChild(a);
     a.click();
-    setTimeout(() => { document.body.removeChild(a); }, 150);
+    setTimeout(() => { document.body.removeChild(a); }, 200);
 
-    // Mobile fallback: Web Share API if supported, or open in new tab
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    if (isMobile) {
-      const file = new File([blob], filename, { type: 'application/pdf' });
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        try {
-          await navigator.share({
-            title: filename,
-            files: [file]
-          });
-        } catch (shareErr) {
-          if (shareErr.name !== 'AbortError') {
-            window.open(blobUrl, '_blank');
-          }
-        }
-      } else {
-        window.open(blobUrl, '_blank');
-      }
+    // On iOS Safari where synthetic download is ignored, open in browser reader
+    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+    if (isIOS) {
+      window.location.href = blobUrl;
     }
   } catch (err) {
     console.error('PDF generation error:', err);
@@ -897,27 +909,28 @@ async function shareWhatsAppPdf() {
     const file = new File([blob], filename, { type: 'application/pdf' });
 
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      // NOTE: Passing ONLY files (without conflicting text) ensures WhatsApp on iOS & Android
+      // opens the attachment picker with the PDF file directly attached!
       await navigator.share({
-        title: partyName + ' — Hisab Statement',
-        text: 'ADEEB ENTERPRISES - Hisab Statement PDF for ' + partyName,
         files: [file]
       });
     } else {
-      // Desktop or browser without file share: Download PDF and open party WhatsApp
+      // Browser without file share: Download PDF and open party WhatsApp
       const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = blobUrl;
       a.download = filename;
       document.body.appendChild(a);
       a.click();
-      setTimeout(() => { document.body.removeChild(a); }, 150);
-      alert('PDF statement file download ho gaya hai! WhatsApp chat khul rahi hai...');
-      window.open(whatsappDirectUrl, '_blank');
+      setTimeout(() => {
+        document.body.removeChild(a);
+        window.location.href = whatsappDirectUrl;
+      }, 300);
     }
   } catch (err) {
     if (err.name !== 'AbortError') {
       console.error('WhatsApp share error:', err);
-      window.open(whatsappDirectUrl, '_blank');
+      window.location.href = whatsappDirectUrl;
     }
   } finally {
     if (btn) { btn.innerHTML = origText; btn.disabled = false; }
@@ -1033,8 +1046,15 @@ async function shareWhatsAppPdf() {
     <div class="app-footer-note">${business?.statementFooter ?? 'Amounts you record. Not calculated, filed or verified by this app.'}</div>
   </div>
 
-  <div class="doc-footer">
-    <div class="disclaimer-line">Computer-generated statement of account. Not a tax invoice.</div>
+  <!-- Official Stamp Disclaimer Seal (Replacing plain text) -->
+  <div class="doc-footer" style="margin-top: 26px; text-align: center; page-break-inside: avoid;">
+    <img
+      src="${DISCLAIMER_STAMP_BASE64}"
+      class="stamp-disclaimer-img"
+      alt="Computer-generated statement of account. Not a tax invoice."
+      style="width: 250px; max-width: 80%; height: auto; display: inline-block; transform: rotate(-1.5deg); filter: drop-shadow(0 1px 2px rgba(0,0,0,0.1));"
+    />
+    <div class="disclaimer-line" style="display: none;">Computer-generated statement of account. Not a tax invoice.</div>
   </div>
 </div>
 

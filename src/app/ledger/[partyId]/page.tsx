@@ -325,6 +325,21 @@ function PartyLedgerHubContent() {
     setPaymentModalOpen(true);
   }
 
+  function openNewCashExModal() {
+    setEditingPayment(null);
+    setPaymentForm({
+      date: toIsoDate(new Date()),
+      refNo: '',
+      direction: 'RECEIVED',
+      method: 'CASH_EX',
+      amount: '',
+      notes: 'Cash EX',
+      applyCashEx: true,
+      manualCashExAmount: '',
+    });
+    setPaymentModalOpen(true);
+  }
+
   function startEditPayment(p: any) {
     setEditingPayment(p);
     setPaymentForm({
@@ -619,79 +634,118 @@ function PartyLedgerHubContent() {
               </div>
             </div>
 
-            {/* ── UNIFIED TABS BAR (All sections right inside Party) ── */}
-            <div style={{ display: 'flex', borderBottom: '2px solid #808080', marginBottom: 10, gap: 4, flexWrap: 'wrap' }}>
-              <button
-                className={`win95-btn ${activeTab === 'ledger' ? 'win95-btn-primary' : ''}`}
-                style={{ padding: '4px 12px', fontWeight: 'bold', borderBottom: 'none' }}
-                onClick={() => setActiveTab('ledger')}
-              >
-                📒 Party Ledger ({allEntries.length})
-              </button>
-              <button
-                className={`win95-btn ${activeTab === 'purchases' ? 'win95-btn-primary' : ''}`}
-                style={{ padding: '4px 12px', fontWeight: 'bold', borderBottom: 'none' }}
-                onClick={() => setActiveTab('purchases')}
-              >
-                🐃 Purchases / Kharid ({purchases.length})
-              </button>
-              <button
-                className={`win95-btn ${activeTab === 'payments' ? 'win95-btn-primary' : ''}`}
-                style={{ padding: '4px 12px', fontWeight: 'bold', borderBottom: 'none' }}
-                onClick={() => setActiveTab('payments')}
-              >
-                💰 Payments / Jama ({payments.length})
-              </button>
-              <button
-                className={`win95-btn ${activeTab === 'cashex' ? 'win95-btn-primary' : ''}`}
-                style={{ padding: '4px 12px', fontWeight: 'bold', borderBottom: 'none' }}
-                onClick={() => setActiveTab('cashex')}
-              >
-                💸 Cash EX ({allCashExList.length})
-              </button>
-              <button
-                className={`win95-btn ${activeTab === 'profile' ? 'win95-btn-primary' : ''}`}
-                style={{ padding: '4px 12px', fontWeight: 'bold', borderBottom: 'none' }}
-                onClick={() => setActiveTab('profile')}
-              >
-                ⚙️ Party Profile & Settings
-              </button>
+            {/* ── SECTION DROPDOWN SELECTOR (Dropdown for all party sections) ── */}
+            <div className='group-box' style={{ marginBottom: 10, padding: '6px 10px', background: '#ece9d8' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <label style={{ fontSize: 11, fontWeight: 'bold', color: '#0f172a' }}>
+                    📁 Section / Tab:
+                  </label>
+                  <select
+                    className='win95-select'
+                    value={activeTab}
+                    onChange={(e) => setActiveTab(e.target.value as any)}
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 'bold',
+                      padding: '4px 10px',
+                      minWidth: 240,
+                      background: '#ffffff',
+                      color: '#000080',
+                      borderRadius: 3,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <option value='ledger'>📒 Party Ledger ({allEntries.length})</option>
+                    <option value='purchases'>🐃 Purchases / Kharid ({purchases.length})</option>
+                    <option value='payments'>💰 Payments / Jama ({payments.length})</option>
+                    <option value='cashex'>💸 Cash EX ({allCashExList.length})</option>
+                    <option value='profile'>⚙️ Party Profile & Settings</option>
+                  </select>
+                </div>
+
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  <button className='win95-btn win95-btn-primary' style={{ fontSize: 11 }} onClick={openNewPurchaseModal}>
+                    ➕ New Kharid
+                  </button>
+                  <button className='win95-btn' style={{ fontSize: 11, background: '#15803d', color: '#fff' }} onClick={openNewPaymentModal}>
+                    ➕ New Jama
+                  </button>
+                  <button className='win95-btn' style={{ fontSize: 11, background: '#0284c7', color: '#fff' }} onClick={openNewCashExModal}>
+                    ➕ New Cash EX
+                  </button>
+                </div>
+              </div>
             </div>
 
             {/* ── TAB 1: PARTY LEDGER ── */}
             {activeTab === 'ledger' && (
               <div>
-                {/* Date Filters & Presets */}
-                <div className='group-box' style={{ marginBottom: 10, padding: 8 }}>
+                {/* ── DATE FILTER DROPDOWN ── */}
+                <div className='group-box' style={{ marginBottom: 10, padding: '6px 10px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: 11, fontWeight: 'bold', marginRight: 4 }}>Date Filter:</span>
-                      <button className={`win95-btn ${activePreset === 'today' ? 'win95-btn-primary' : ''}`} style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => applyPreset('today')}>
-                        📅 Aaj (Today)
-                      </button>
-                      <button className={`win95-btn ${activePreset === 'yesterday' ? 'win95-btn-primary' : ''}`} style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => applyPreset('yesterday')}>
-                        📅 Kal se Aaj
-                      </button>
-                      <button className={`win95-btn ${activePreset === '1m' ? 'win95-btn-primary' : ''}`} style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => applyPreset('1m')}>
-                        📅 1 Mahina
-                      </button>
-                      <button className={`win95-btn ${activePreset === '2m' ? 'win95-btn-primary' : ''}`} style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => applyPreset('2m')}>
-                        📅 2 Mahine
-                      </button>
-                      <button className={`win95-btn ${activePreset === '6m' ? 'win95-btn-primary' : ''}`} style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => applyPreset('6m')}>
-                        📅 6 Mahine
-                      </button>
-                      <button className={`win95-btn ${activePreset === 'all' ? 'win95-btn-primary' : ''}`} style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => applyPreset('all')}>
-                        📅 Shuru se End tak (All)
-                      </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <label style={{ fontSize: 11, fontWeight: 'bold', color: '#0f172a' }}>
+                        📅 Date Filter:
+                      </label>
+                      <select
+                        className='win95-select'
+                        value={activePreset}
+                        onChange={(e) => {
+                          const val = e.target.value as any;
+                          if (val === 'custom') {
+                            setActivePreset('custom');
+                          } else {
+                            applyPreset(val);
+                          }
+                        }}
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 'bold',
+                          padding: '4px 10px',
+                          minWidth: 210,
+                          borderRadius: 3,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <option value='all'>📅 Shuru se End tak (All)</option>
+                        <option value='today'>📅 Aaj (Today)</option>
+                        <option value='yesterday'>📅 Kal se Aaj</option>
+                        <option value='1m'>📅 1 Mahina</option>
+                        <option value='2m'>📅 2 Mahine</option>
+                        <option value='6m'>📅 6 Mahine</option>
+                        <option value='custom'>🗓️ Custom Date (From - To)...</option>
+                      </select>
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                      <label className='form-label'>From:</label>
-                      <input className='win95-input' type='date' style={{ width: 130 }} value={from} onChange={e => { setFrom(e.target.value); setActivePreset('custom'); }} />
-                      <label className='form-label'>To:</label>
-                      <input className='win95-input' type='date' style={{ width: 130 }} value={to} onChange={e => { setTo(e.target.value); setActivePreset('custom'); }} />
-                      <button className='toolbar-btn' onClick={load}>⟳ Apply</button>
+                      <label className='form-label' style={{ fontSize: 11 }}>From:</label>
+                      <input
+                        className='win95-input'
+                        type='date'
+                        style={{ width: 130, fontSize: 11 }}
+                        value={from}
+                        onChange={e => { setFrom(e.target.value); setActivePreset('custom'); }}
+                      />
+                      <label className='form-label' style={{ fontSize: 11 }}>To:</label>
+                      <input
+                        className='win95-input'
+                        type='date'
+                        style={{ width: 130, fontSize: 11 }}
+                        value={to}
+                        onChange={e => { setTo(e.target.value); setActivePreset('custom'); }}
+                      />
+                      <button className='toolbar-btn' onClick={load} style={{ padding: '3px 10px', fontWeight: 'bold' }}>⟳ Apply</button>
+                      {(from || to) && (
+                        <button
+                          className='win95-btn'
+                          style={{ fontSize: 10, padding: '2px 6px' }}
+                          onClick={() => applyPreset('all')}
+                          title='Reset to all'
+                        >
+                          ✕ Clear
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
