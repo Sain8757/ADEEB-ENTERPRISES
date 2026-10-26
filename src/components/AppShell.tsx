@@ -15,12 +15,11 @@ interface AppShellProps {
   statusText?: string;
 }
 
-// Navigation: ONLY Dashboard, Parties, Reports, Trash Bin, Settings
+// Navigation: ONLY Dashboard, Parties, Reports, Settings (Trash Bin is inside Settings)
 const NAV_ITEMS = [
   { label: "Dashboard", href: "/dashboard", icon: "🏠" },
   { label: "Parties",   href: "/parties",   icon: "👥" },
   { label: "Reports",   href: "/reports",   icon: "📊" },
-  { label: "Trash Bin", href: "/trash",     icon: "🗑️" },
   { label: "Settings",  href: "/settings",  icon: "⚙️" },
 ];
 
@@ -67,12 +66,14 @@ export default function AppShell({
           <button className="title-btn" title="Close">✕</button>
         </div>
 
-        {/* ── TOP NAVBAR (Main Navigation: Dashboard, Parties, Reports, Trash Bin, Settings) ── */}
+        {/* ── TOP NAVBAR (Main Navigation: Dashboard, Parties, Reports, Settings) ── */}
         <div className="toolbar top-nav-bar" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px', overflowX: 'auto', flexWrap: 'nowrap' }}>
           {NAV_ITEMS.map((item) => {
             const isActive = item.href === '/dashboard'
               ? pathname === '/dashboard'
-              : pathname?.startsWith(item.href) || (item.href === '/parties' && pathname?.startsWith('/ledger'));
+              : pathname?.startsWith(item.href) ||
+                (item.href === '/parties' && pathname?.startsWith('/ledger')) ||
+                (item.href === '/settings' && pathname?.startsWith('/trash'));
             return (
               <button
                 key={item.href}
@@ -131,7 +132,9 @@ export default function AppShell({
           {NAV_ITEMS.map((item) => {
             const isActive = item.href === '/dashboard'
               ? pathname === '/dashboard'
-              : pathname?.startsWith(item.href) || (item.href === '/parties' && pathname?.startsWith('/ledger'));
+              : pathname?.startsWith(item.href) ||
+                (item.href === '/parties' && pathname?.startsWith('/ledger')) ||
+                (item.href === '/settings' && pathname?.startsWith('/trash'));
             return (
               <Link
                 key={item.href}

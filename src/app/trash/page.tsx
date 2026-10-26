@@ -100,7 +100,10 @@ export default function TrashPage() {
               Deactivated parties remain here for 30 days. You can restore them anytime or permanently delete them.
             </div>
           </div>
-          <button className='toolbar-btn' onClick={load}>⟳ Refresh</button>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <Link href='/settings' className='toolbar-btn' style={{ textDecoration: 'none' }}>⚙️ Settings</Link>
+            <button className='toolbar-btn' onClick={load}>⟳ Refresh</button>
+          </div>
         </div>
 
         {success && <div className='alert-box success' style={{ marginBottom: 8 }}>✅ {success}</div>}

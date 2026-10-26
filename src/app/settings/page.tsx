@@ -67,27 +67,6 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          <div className='group-box'>
-            <div className='group-box-title'>Cash EX Configuration</div>
-            <div style={{ fontSize: 11, color: '#808080', marginBottom: 8 }}>
-              Cash EX Expense = Cash Received × Rate ÷ Basis. Default: ₹200 per ₹1,00,000.
-            </div>
-            <div className='form-row'>
-              <div className='form-field' style={{ flex: 1 }}>
-                <label className='form-label'>Cash EX Rate (₹)</label>
-                <input className='win95-input' type='number' step='0.01' value={settings.cashExRate ?? 200} onChange={e => setSettings((s: any) => ({ ...s, cashExRate: e.target.value }))} disabled={role !== 'ADMIN'} />
-              </div>
-              <div className='form-field' style={{ flex: 1 }}>
-                <label className='form-label'>Cash EX Basis (₹)</label>
-                <input className='win95-input' type='number' step='1' value={settings.cashExBasis ?? 100000} onChange={e => setSettings((s: any) => ({ ...s, cashExBasis: e.target.value }))} disabled={role !== 'ADMIN'} />
-              </div>
-            </div>
-            <div style={{ fontSize: 10, background: '#fffacc', border: '1px solid #808000', padding: '4px 8px' }}>
-              Current formula: Cash × {settings.cashExRate ?? 200} ÷ {settings.cashExBasis ?? 100000}
-              &nbsp;(e.g. ₹1,00,000 → ₹{((100000 * (settings.cashExRate ?? 200)) / (settings.cashExBasis ?? 100000)).toFixed(2)} expense)
-            </div>
-          </div>
-
           {role === 'ADMIN' && (
             <div style={{ marginTop: 8 }}>
               <button type='submit' className='win95-btn win95-btn-primary' disabled={saving}>
@@ -96,6 +75,30 @@ export default function SettingsPage() {
             </div>
           )}
         </form>
+
+        {/* ── TRASH BIN (Settings ke andar) ── */}
+        <div className='group-box' style={{ marginTop: 16 }}>
+          <div className='group-box-title'>🗑️ Trash Bin (Recycle Bin)</div>
+          <p style={{ fontSize: 11, color: '#334155', marginBottom: 10 }}>
+            Deactivated parties are kept in Trash for 30 days before permanent deletion. You can restore or permanently delete them here.
+          </p>
+          <a
+            href='/trash'
+            className='win95-btn'
+            style={{
+              textDecoration: 'none',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '6px 14px',
+              fontWeight: 'bold',
+              background: '#f1f5f9',
+              color: '#0f172a'
+            }}
+          >
+            🗑️ Open Trash Bin →
+          </a>
+        </div>
 
         <div className='group-box' style={{ marginTop: 16 }}>
           <div className='group-box-title'>Your Account</div>

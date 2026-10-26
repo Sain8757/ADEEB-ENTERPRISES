@@ -86,7 +86,7 @@ export default function DashboardPage() {
                   </thead>
                   <tbody>
                     {recent.length === 0 && (
-                      <tr><td colSpan={7} style={{ textAlign: 'center', color: '#808080', padding: 8 }}>No transactions yet. <a href='/purchases/new' style={{ color: '#000080' }}>Add first purchase →</a></td></tr>
+                      <tr><td colSpan={7} style={{ textAlign: 'center', color: '#808080', padding: 8 }}>No transactions yet. <a href='/parties' style={{ color: '#000080' }}>Go to Parties →</a></td></tr>
                     )}
                     {recent.map((e: any) => {
                       const bal = parseFloat(e.runningBalance);
@@ -113,19 +113,6 @@ export default function DashboardPage() {
                   </tbody>
                 </table>
               </div>
-            </div>
-
-            {/* Quick actions */}
-            <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-              <a href='/purchases/new' className='win95-btn win95-btn-primary' style={{ textDecoration: 'none', display: 'inline-block' }}>🐃 New Purchase</a>
-              <a href='/payments/new' className='win95-btn win95-btn-primary' style={{ textDecoration: 'none', display: 'inline-block' }}>💰 New Payment</a>
-              <a href='/cash-ex/new' className='win95-btn win95-btn-primary' style={{ textDecoration: 'none', display: 'inline-block' }}>💸 New Cash EX</a>
-              <a href='/parties' className='win95-btn' style={{ textDecoration: 'none', display: 'inline-block' }}>👥 Parties</a>
-              <a href='/reports' className='win95-btn' style={{ textDecoration: 'none', display: 'inline-block' }}>📊 Reports</a>
-            </div>
-
-            <div style={{ marginTop: 12, padding: '4px 8px', background: '#fffacc', border: '1px solid #808000', fontSize: 10 }}>
-              <strong>ℹ️ Ledger Convention:</strong> DR = Party owes ADEEB ENTERPRISES (Receivable). CR = ADEEB ENTERPRISES owes party (Payable). Cash EX is a separate business expense — never deducted from party payments.
             </div>
           </>
         )}
