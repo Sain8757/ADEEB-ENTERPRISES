@@ -23,13 +23,25 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const search = searchParams.get('search') ?? '';
   const includeInactive = searchParams.get('includeInactive') === 'true';
+  const isTrash = searchParams.get('trash') === 'true';
+
+  let whereClause: any = {
+    name: search ? { contains: search, mode: 'insensitive' } : undefined,
+  };
+
+  if (isTrash) {
+    whereClause.OR = [
+      { active: false },
+      { deletedAt: { not: null } },
+    ];
+  } else if (!includeInactive) {
+    whereClause.active = true;
+    whereClause.deletedAt = null;
+  }
 
   const parties = await prisma.party.findMany({
-    where: {
-      active: includeInactive ? undefined : true,
-      name: search ? { contains: search, mode: 'insensitive' } : undefined,
-    },
-    orderBy: { name: 'asc' },
+    where: whereClause,
+    orderBy: isTrash ? { deletedAt: 'desc' } : { name: 'asc' },
   });
 
   return NextResponse.json(parties);

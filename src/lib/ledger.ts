@@ -477,3 +477,378 @@ export async function createPaymentEntry(data: {
 
   return { payment: createdPayment, cashExExpense };
 }
+
+// ─────────────────────────────────────────────
+// RECALCULATE PARTY LEDGER (Resync all running balances)
+// ─────────────────────────────────────────────
+
+export async function recalculatePartyLedger(partyId: string): Promise<void> {
+  const party = await prisma.party.findUnique({ where: { id: partyId } });
+  if (!party) return;
+
+  await prisma.$transaction(async (tx) => {
+    // 1. Remove all active ledger entries for this party
+    await tx.ledgerEntry.deleteMany({ where: { partyId } });
+
+    // 2. Initial running balance from opening balance
+    const ob = new Decimal(party.openingBalance.toString());
+    let currentBalance = party.openingBalanceDirection === "DR" ? ob : ob.neg();
+
+    // Recreate opening balance entry if non-zero
+    if (!ob.isZero()) {
+      await tx.ledgerEntry.create({
+        data: {
+          partyId,
+          date: party.openingBalanceDate ?? party.createdAt,
+          txType: "OPENING_BALANCE",
+          description: `Opening Balance — ${party.openingBalanceDirection === "DR" ? "Receivable" : "Payable"}`,
+          debit: party.openingBalanceDirection === "DR" ? ob.toFixed(2) : "0",
+          credit: party.openingBalanceDirection === "CR" ? ob.toFixed(2) : "0",
+          runningBalance: currentBalance.toFixed(2),
+        },
+      });
+    }
+
+    // 3. Fetch all active purchases and payments
+    const [purchases, payments] = await Promise.all([
+      tx.purchaseEntry.findMany({
+        where: { partyId, reversed: false },
+        orderBy: [{ date: "asc" }, { createdAt: "asc" }],
+      }),
+      tx.payment.findMany({
+        where: { partyId, reversed: false },
+        orderBy: [{ date: "asc" }, { createdAt: "asc" }],
+      }),
+    ]);
+
+    // 4. Merge into unified chronological list
+    type TimelineItem =
+      | { kind: "PURCHASE"; date: Date; createdAt: Date; data: PurchaseEntry }
+      | { kind: "PAYMENT"; date: Date; createdAt: Date; data: Payment };
+
+    const timeline: TimelineItem[] = [
+      ...purchases.map(p => ({ kind: "PURCHASE" as const, date: p.date, createdAt: p.createdAt, data: p })),
+      ...payments.map(pm => ({ kind: "PAYMENT" as const, date: pm.date, createdAt: pm.createdAt, data: pm })),
+    ].sort((a, b) => a.date.getTime() - b.date.getTime() || a.createdAt.getTime() - b.createdAt.getTime());
+
+    // 5. Post each entry in order with updated runningBalance
+    for (const item of timeline) {
+      if (item.kind === "PURCHASE") {
+        const p = item.data;
+        const amount = new Decimal(p.amount.toString());
+        currentBalance = currentBalance.plus(amount);
+
+        await tx.ledgerEntry.create({
+          data: {
+            partyId,
+            date: p.date,
+            txType: "PURCHASE",
+            refNo: p.receiptNo,
+            description: `Purchase — ${p.category ?? 'General'} — Qty ${p.qty} — ${p.totalWeight}kg @ ₹${p.rate}/kg`,
+            debit: amount.toFixed(2),
+            credit: "0",
+            runningBalance: currentBalance.toFixed(2),
+            purchaseId: p.id,
+            sourceTxId: p.id,
+            sourceTxType: "PURCHASE",
+            createdById: p.createdById,
+            createdAt: p.createdAt,
+          },
+        });
+      } else {
+        const pm = item.data;
+        const amount = new Decimal(pm.amount.toString());
+        let debit = "0";
+        let credit = "0";
+
+        if (pm.direction === "RECEIVED") {
+          credit = amount.toFixed(2);
+          currentBalance = currentBalance.minus(amount);
+        } else {
+          debit = amount.toFixed(2);
+          currentBalance = currentBalance.plus(amount);
+        }
+
+        await tx.ledgerEntry.create({
+          data: {
+            partyId,
+            date: pm.date,
+            txType: pm.direction === "RECEIVED" ? "PAYMENT_RECEIVED" : "PAYMENT_PAID",
+            refNo: pm.refNo,
+            description: `${pm.direction === "RECEIVED" ? "Payment Received" : "Payment Paid"} — ${pm.method}${pm.refNo ? ` — Ref: ${pm.refNo}` : ""}`,
+            debit,
+            credit,
+            runningBalance: currentBalance.toFixed(2),
+            paymentId: pm.id,
+            sourceTxId: pm.id,
+            sourceTxType: "PAYMENT",
+            createdById: pm.createdById,
+            createdAt: pm.createdAt,
+          },
+        });
+      }
+    }
+  });
+}
+
+// ─────────────────────────────────────────────
+// UPDATE PURCHASE ENTRY
+// ─────────────────────────────────────────────
+
+export async function updatePurchaseEntry(id: string, data: {
+  date: Date;
+  partyId: string;
+  receiptNo?: string;
+  qty: number;
+  category?: "BC" | "SC" | "VC_HISTORICAL" | null;
+  totalWeight: string;
+  rate: string;
+  notes?: string;
+  userId?: string;
+}): Promise<PurchaseEntry> {
+  const existing = await prisma.purchaseEntry.findUnique({ where: { id } });
+  if (!existing) throw new Error("Purchase entry not found");
+
+  const calc = calcPurchase({
+    qty: data.qty,
+    totalWeight: data.totalWeight,
+    rate: data.rate,
+  });
+
+  const updated = await prisma.purchaseEntry.update({
+    where: { id },
+    data: {
+      date: data.date,
+      partyId: data.partyId,
+      receiptNo: data.receiptNo,
+      qty: data.qty,
+      category: data.category ? (data.category as any) : null,
+      totalWeight: data.totalWeight,
+      avgWeight: calc.avgWeight.toFixed(3),
+      rate: data.rate,
+      amount: calc.amount.toFixed(2),
+      notes: data.notes,
+    },
+  });
+
+  // Resync party ledger
+  await recalculatePartyLedger(data.partyId);
+  if (existing.partyId !== data.partyId) {
+    await recalculatePartyLedger(existing.partyId);
+  }
+
+  await audit({
+    userId: data.userId,
+    action: AUDIT_ACTIONS.UPDATE,
+    entity: "PurchaseEntry",
+    entityId: id,
+    before: existing as unknown as object,
+    after: updated as unknown as object,
+  });
+
+  return updated;
+}
+
+// ─────────────────────────────────────────────
+// DELETE PURCHASE ENTRY
+// ─────────────────────────────────────────────
+
+export async function deletePurchaseEntry(id: string, userId?: string): Promise<void> {
+  const existing = await prisma.purchaseEntry.findUnique({ where: { id } });
+  if (!existing) throw new Error("Purchase entry not found");
+
+  const partyId = existing.partyId;
+
+  await prisma.$transaction(async (tx) => {
+    // Delete corresponding ledger entry
+    await tx.ledgerEntry.deleteMany({ where: { purchaseId: id } });
+    await tx.purchaseEntry.delete({ where: { id } });
+  });
+
+  await recalculatePartyLedger(partyId);
+
+  await audit({
+    userId,
+    action: AUDIT_ACTIONS.DELETE,
+    entity: "PurchaseEntry",
+    entityId: id,
+    before: existing as unknown as object,
+  });
+}
+
+// ─────────────────────────────────────────────
+// UPDATE PAYMENT ENTRY
+// ─────────────────────────────────────────────
+
+export async function updatePaymentEntry(id: string, data: {
+  date: Date;
+  partyId: string;
+  refNo?: string;
+  direction: "RECEIVED" | "PAID";
+  method: string;
+  amount: string;
+  notes?: string;
+  bankRef?: string;
+  applyCashEx?: boolean;
+  manualCashExAmount?: string;
+  userId?: string;
+}): Promise<Payment> {
+  const existing = await prisma.payment.findUnique({
+    where: { id },
+    include: { cashExExpense: true },
+  });
+  if (!existing) throw new Error("Payment not found");
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const p = await tx.payment.update({
+      where: { id },
+      data: {
+        date: data.date,
+        partyId: data.partyId,
+        refNo: data.refNo,
+        direction: data.direction as any,
+        method: data.method,
+        amount: data.amount,
+        notes: data.notes,
+        bankRef: data.bankRef,
+      },
+    });
+
+    // Handle Cash EX
+    const shouldApply = data.applyCashEx !== undefined ? data.applyCashEx : isCashExEligible(data.direction, data.method);
+    if (shouldApply && isCashExEligible(data.direction, data.method)) {
+      const biz = await tx.business.findFirst();
+      const rate = biz ? parseFloat(biz.cashExRate.toString()) : 200;
+      const basis = biz ? parseFloat(biz.cashExBasis.toString()) : 100000;
+      const autoResult = calcCashEx({ cashReceived: data.amount, rate, basis });
+      const expenseAmount = data.manualCashExAmount && parseFloat(data.manualCashExAmount) > 0
+        ? new Decimal(data.manualCashExAmount).toFixed(2)
+        : autoResult.expenseAmount.toFixed(2);
+
+      if (existing.cashExExpense) {
+        await tx.cashExExpense.update({
+          where: { id: existing.cashExExpense.id },
+          data: {
+            date: data.date,
+            cashAmount: data.amount,
+            expenseAmount,
+            rateApplied: String(rate),
+            basisApplied: String(basis),
+          },
+        });
+      } else {
+        await tx.cashExExpense.create({
+          data: {
+            paymentId: id,
+            date: data.date,
+            cashAmount: data.amount,
+            expenseAmount,
+            rateApplied: String(rate),
+            basisApplied: String(basis),
+            confirmedById: data.userId,
+          },
+        });
+      }
+    } else if (existing.cashExExpense && !shouldApply) {
+      await tx.cashExExpense.delete({ where: { id: existing.cashExExpense.id } });
+    }
+
+    return p;
+  });
+
+  await recalculatePartyLedger(data.partyId);
+  if (existing.partyId !== data.partyId) {
+    await recalculatePartyLedger(existing.partyId);
+  }
+
+  await audit({
+    userId: data.userId,
+    action: AUDIT_ACTIONS.UPDATE,
+    entity: "Payment",
+    entityId: id,
+    before: existing as unknown as object,
+    after: updated as unknown as object,
+  });
+
+  return updated;
+}
+
+// ─────────────────────────────────────────────
+// DELETE PAYMENT ENTRY
+// ─────────────────────────────────────────────
+
+export async function deletePaymentEntry(id: string, userId?: string): Promise<void> {
+  const existing = await prisma.payment.findUnique({
+    where: { id },
+    include: { cashExExpense: true },
+  });
+  if (!existing) throw new Error("Payment not found");
+
+  const partyId = existing.partyId;
+
+  await prisma.$transaction(async (tx) => {
+    if (existing.cashExExpense) {
+      await tx.cashExExpense.delete({ where: { id: existing.cashExExpense.id } });
+    }
+    await tx.ledgerEntry.deleteMany({ where: { paymentId: id } });
+    await tx.payment.delete({ where: { id } });
+  });
+
+  await recalculatePartyLedger(partyId);
+
+  await audit({
+    userId,
+    action: AUDIT_ACTIONS.DELETE,
+    entity: "Payment",
+    entityId: id,
+    before: existing as unknown as object,
+  });
+}
+
+// ─────────────────────────────────────────────
+// UPDATE / DELETE CASH EX EXPENSE
+// ─────────────────────────────────────────────
+
+export async function updateCashExExpense(id: string, data: {
+  expenseAmount: string;
+  overrideReason?: string;
+  userId?: string;
+}): Promise<CashExExpense> {
+  const existing = await prisma.cashExExpense.findUnique({ where: { id } });
+  if (!existing) throw new Error("Cash EX expense not found");
+
+  const updated = await prisma.cashExExpense.update({
+    where: { id },
+    data: {
+      expenseAmount: data.expenseAmount,
+      overrideAmount: data.expenseAmount,
+      overrideReason: data.overrideReason,
+    },
+  });
+
+  await audit({
+    userId: data.userId,
+    action: AUDIT_ACTIONS.UPDATE,
+    entity: "CashExExpense",
+    entityId: id,
+    before: existing as unknown as object,
+    after: updated as unknown as object,
+  });
+
+  return updated;
+}
+
+export async function deleteCashExExpense(id: string, userId?: string): Promise<void> {
+  const existing = await prisma.cashExExpense.findUnique({ where: { id } });
+  if (!existing) throw new Error("Cash EX expense not found");
+
+  await prisma.cashExExpense.delete({ where: { id } });
+
+  await audit({
+    userId,
+    action: AUDIT_ACTIONS.DELETE,
+    entity: "CashExExpense",
+    entityId: id,
+    before: existing as unknown as object,
+  });
+}

@@ -18,18 +18,52 @@ export async function GET(
   const from = searchParams.get('from');
   const to = searchParams.get('to');
 
-  function parseDate(s: string | null): Date | undefined {
+  function parseDate(s: string | null, endOfDay = false): Date | undefined {
     if (!s || s.trim() === '' || s === 'null' || s === 'undefined') return undefined;
     const d = new Date(s);
-    return isNaN(d.getTime()) ? undefined : d;
+    if (isNaN(d.getTime())) return undefined;
+    if (endOfDay) {
+      d.setHours(23, 59, 59, 999);
+    } else {
+      d.setHours(0, 0, 0, 0);
+    }
+    return d;
   }
-  const fromDate = parseDate(from);
-  const toDate = parseDate(to);
+  const fromDate = parseDate(from, false);
+  const toDate = parseDate(to, true);
 
   const party = await prisma.party.findUnique({ where: { id: partyId } });
   if (!party) return NextResponse.json({ error: 'Party not found' }, { status: 404 });
 
   const business = await prisma.business.findFirst();
+
+  // ── Prior transactions before fromDate (to compute exact starting balance) ──
+  let priorPurchasesTotal = new Decimal(0);
+  let priorPaymentsReceivedTotal = new Decimal(0);
+  let priorPaymentsPaidTotal = new Decimal(0);
+
+  if (fromDate) {
+    const [priorPurchases, priorPayments] = await Promise.all([
+      prisma.purchaseEntry.findMany({
+        where: { partyId, reversed: false, date: { lt: fromDate } },
+        select: { amount: true },
+      }),
+      prisma.payment.findMany({
+        where: { partyId, reversed: false, date: { lt: fromDate } },
+        select: { amount: true, direction: true },
+      }),
+    ]);
+    for (const p of priorPurchases) {
+      priorPurchasesTotal = priorPurchasesTotal.plus(new Decimal(p.amount.toString()));
+    }
+    for (const pm of priorPayments) {
+      if (pm.direction === 'RECEIVED') {
+        priorPaymentsReceivedTotal = priorPaymentsReceivedTotal.plus(new Decimal(pm.amount.toString()));
+      } else {
+        priorPaymentsPaidTotal = priorPaymentsPaidTotal.plus(new Decimal(pm.amount.toString()));
+      }
+    }
+  }
 
   const [purchases, payments] = await Promise.all([
     prisma.purchaseEntry.findMany({
@@ -50,8 +84,16 @@ export async function GET(
   ]);
 
   // ── Calculations ────────────────────────────────────────────────────────────
-  const openingBalance = new Decimal(party.openingBalance.toString());
-  const openingDir = party.openingBalanceDirection;
+  const initialOpeningBalance = new Decimal(party.openingBalance.toString());
+  const initialOpeningSigned = party.openingBalanceDirection === 'DR'
+    ? initialOpeningBalance
+    : initialOpeningBalance.neg();
+
+  // Opening balance as of fromDate:
+  const openingSigned = initialOpeningSigned
+    .plus(priorPurchasesTotal)
+    .minus(priorPaymentsReceivedTotal)
+    .plus(priorPaymentsPaidTotal);
 
   const totalPurchases = purchases.reduce(
     (s, p) => s.plus(new Decimal(p.amount.toString())), new Decimal(0)
@@ -89,7 +131,6 @@ export async function GET(
 
   // Closing balance (Signed math matching reference format)
   // CR = negative (payable / credit), DR = positive (receivable)
-  const openingSigned = openingDir === 'DR' ? openingBalance : openingBalance.neg();
   const closingSigned = openingSigned.plus(totalPurchases).minus(totalPayments).plus(totalPaid);
 
   const statementHtml = generateStatementHtml({
@@ -292,6 +333,8 @@ function generateStatementHtml(data: any): string {
   const purchasesFormulaStr = fmtNum(totalPurchases, 2);
   const paymentsFormulaStr = fmtNum(totalPayments, 2);
   const closingResultStr = fmtBalFullDecimal(closingSigned);
+
+  const whatsappText = `*${business?.name ?? 'ADEEB ENTERPRISES'}*\n*Hisab Statement — ${party.name}*\nPeriod: ${periodBoxStr}\n---------------------------------\nKharid (Purchases): ₹${fmtNum(totalPurchases, 0)} (${totalQty} Buffaloes, ${fmtNum(totalWeight, 1)} kg)\nJama (Payments): ₹${fmtNum(totalPayments, 0)}\n*Net Balance: ${fmtBalWithSymbol(closingSigned)}*\n---------------------------------\nComputer-generated statement.`;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -632,13 +675,21 @@ function downloadPdfFile() {
 </head>
 <body>
 
-<div class="no-print">
-  <button class="print-btn download-btn" style="background:#15803d;" onclick="downloadPdfFile()">📥 Download PDF File</button>
-  <button class="print-btn" onclick="window.print()">🖨️ Print / Save as PDF</button>
-  <button class="close-btn" onclick="window.close()">✕ Close</button>
-  <span style="font-size: 11px; color: #64748b; margin-left: 10px;">
-    Tip: "Download PDF" pe click karke seedhe .pdf file save karein.
-  </span>
+<div class="no-print" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+  <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+    <button class="print-btn download-btn" style="background:#15803d;" onclick="downloadPdfFile()">📥 Download PDF File</button>
+    <button class="print-btn" onclick="window.print()">🖨️ Print / Save as PDF</button>
+    <a href="https://api.whatsapp.com/send?${party.mobile ? `phone=${encodeURIComponent(party.mobile)}&` : ''}text=${encodeURIComponent(whatsappText)}" target="_blank" rel="noreferrer" class="print-btn" style="background:#25D366; color:#fff; text-decoration:none; display:inline-flex; align-items:center; gap:4px;">💬 WhatsApp Send</a>
+    <button class="close-btn" onclick="window.close()">✕ Close</button>
+  </div>
+  <form method="GET" style="display:inline-flex; align-items:center; gap:6px; font-size:11px;">
+    <label><strong>From:</strong></label>
+    <input type="date" name="from" value="${from ?? ''}" style="padding:4px 6px; border:1px solid #cbd5e1; border-radius:4px; font-size:11px;">
+    <label><strong>To:</strong></label>
+    <input type="date" name="to" value="${to ?? ''}" style="padding:4px 6px; border:1px solid #cbd5e1; border-radius:4px; font-size:11px;">
+    <button type="submit" class="print-btn" style="background:#0284c7; padding:5px 12px;">🔍 Apply Date</button>
+    ${from || to ? `<a href="/api/statement/${party.id}/pdf" style="font-size:11px; color:#64748b; margin-left:4px; text-decoration:underline;">All Dates</a>` : ''}
+  </form>
 </div>
 
 <div id="running-footer">

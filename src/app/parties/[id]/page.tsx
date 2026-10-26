@@ -33,6 +33,8 @@ export default function PartyDetailPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [form, setForm] = useState({ name: '', mobile: '', address: '', notes: '' });
+  const [showDeactivateModal, setShowDeactivateModal] = useState(false);
+  const [deactivating, setDeactivating] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -62,15 +64,20 @@ export default function PartyDetailPage() {
     setSuccess('Party updated successfully.');
   }
 
-  async function handleDeactivate() {
-    if (!confirm(`Deactivate ${party?.name}? They will be hidden from active lists but ledger data will be preserved.`)) return;
+  async function handleConfirmDeactivate() {
+    setDeactivating(true);
     const res = await fetch(`/api/parties/${partyId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ active: false }),
     });
-    if (res.ok) { router.push('/parties'); }
-    else setError('Failed to deactivate party.');
+    setDeactivating(false);
+    if (res.ok) {
+      setShowDeactivateModal(false);
+      router.push('/trash');
+    } else {
+      setError('Failed to deactivate party.');
+    }
   }
 
   if (loading) return <AppShell currentPage='Party Detail'><div style={{ padding: 16, color: '#808080' }}>Loading...</div></AppShell>;
@@ -192,11 +199,53 @@ export default function PartyDetailPage() {
           <div className='group-box' style={{ marginTop: 16, borderColor: '#800000' }}>
             <div className='group-box-title' style={{ color: '#800000' }}>⚠️ Danger Zone</div>
             <div style={{ fontSize: 11, color: '#808080', marginBottom: 8 }}>
-              Deactivating a party hides them from active lists but preserves all ledger history.
+              Deactivating moves this party to the Trash Bin for 30 days. Ledger data and transactions remain preserved.
             </div>
-            <button className='win95-btn win95-btn-danger' onClick={handleDeactivate}>
-              ❌ Deactivate Party
+            <button className='win95-btn win95-btn-danger' onClick={() => setShowDeactivateModal(true)}>
+              🗑️ Deactivate & Move to Trash
             </button>
+          </div>
+        )}
+
+        {/* Deactivate / Trash Modal */}
+        {showDeactivateModal && (
+          <div className='modal-overlay'>
+            <div className='modal-window' style={{ width: 420 }}>
+              <div className='title-bar' style={{ background: 'linear-gradient(90deg, #800000, #b30000)' }}>
+                <span className='title-bar-text'>⚠️ Confirm Move to Trash</span>
+                <button
+                  style={{ background: '#c0c0c0', border: '1px solid #808080', cursor: 'pointer', fontSize: 10 }}
+                  onClick={() => setShowDeactivateModal(false)}
+                >
+                  ✕
+                </button>
+              </div>
+              <div className='modal-body' style={{ padding: 14 }}>
+                <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                  <span style={{ fontSize: 32 }}>🗑️</span>
+                  <div>
+                    <p style={{ fontWeight: 'bold', marginBottom: 6 }}>
+                      Kya aap sure hain ki "{party.name}" ko Trash mein bhejna chahte hain?
+                    </p>
+                    <p style={{ fontSize: 11, color: '#333', lineHeight: 1.5, marginBottom: 8 }}>
+                      Yeh party agle <strong>30 din</strong> tak Sidebar ke <strong>Trash Bin</strong> mein rahegi. Aap ise wahan se kabhi bhi restore (wapas) kar sakte hain ya permanent delete kar sakte hain.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className='modal-footer' style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: 8 }}>
+                <button className='win95-btn' onClick={() => setShowDeactivateModal(false)}>
+                  Cancel
+                </button>
+                <button
+                  className='win95-btn win95-btn-danger'
+                  onClick={handleConfirmDeactivate}
+                  disabled={deactivating}
+                >
+                  {deactivating ? 'Moving to Trash...' : '🗑️ Haan, Trash me bhejo'}
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>

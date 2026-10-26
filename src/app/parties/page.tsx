@@ -129,7 +129,11 @@ export default function PartiesPage() {
               {parties.map((p) => (
                 <tr key={p.id}>
                   <td style={{ color: '#808080' }}>{p.code || '—'}</td>
-                  <td><strong>{p.name}</strong></td>
+                  <td>
+                    <Link href={`/ledger/${p.id}`} style={{ color: '#000080', fontWeight: 'bold', textDecoration: 'underline' }}>
+                      {p.name}
+                    </Link>
+                  </td>
                   <td>{p.mobile || '—'}</td>
                   <td className='amount'>{fmt(p.openingBalance)}</td>
                   <td>
@@ -139,13 +143,14 @@ export default function PartiesPage() {
                   </td>
                   <td>{p.active ? '✅ Active' : '❌ Inactive'}</td>
                   <td>
-                    <Link href={`/parties/${p.id}`} className='win95-btn' style={{ textDecoration: 'none', fontSize: 10, padding: '2px 6px', display: 'inline-block' }}>
-                      📒 Ledger
-                    </Link>
-                    {' '}
-                    <Link href={`/parties/${p.id}/edit`} className='win95-btn' style={{ textDecoration: 'none', fontSize: 10, padding: '2px 6px', display: 'inline-block' }}>
-                      ✏️ Edit
-                    </Link>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <Link href={`/ledger/${p.id}`} className='win95-btn' style={{ textDecoration: 'none', fontSize: 10, padding: '2px 6px' }}>
+                        📒 Ledger
+                      </Link>
+                      <Link href={`/parties/${p.id}`} className='win95-btn' style={{ textDecoration: 'none', fontSize: 10, padding: '2px 6px' }}>
+                        👤 Details
+                      </Link>
+                    </div>
                   </td>
                 </tr>
               ))}

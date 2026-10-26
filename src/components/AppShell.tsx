@@ -26,6 +26,7 @@ const NAV_ITEMS = [
   { label: "Party Ledger",     href: "/ledger",      icon: "📒" },
   { label: "Reports",          href: "/reports",     icon: "📊" },
   { label: "Audit Log",        href: "/reports/audit", icon: "🔍" },
+  { label: "Trash Bin",        href: "/trash",       icon: "🗑️" },
   { label: "Settings",         href: "/settings",    icon: "⚙️" },
 ];
 
@@ -56,6 +57,8 @@ const MENU_ITEMS = [
     items: [
       { label: "Party List",    href: "/parties" },
       { label: "New Party",     href: "/parties/new" },
+      { separator: true },
+      { label: "Trash Bin",     href: "/trash" },
     ],
   },
   {
