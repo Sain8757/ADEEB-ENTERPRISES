@@ -18,6 +18,14 @@ export async function GET(
   const from = searchParams.get('from');
   const to = searchParams.get('to');
 
+  function parseDate(s: string | null): Date | undefined {
+    if (!s || s.trim() === '' || s === 'null' || s === 'undefined') return undefined;
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? undefined : d;
+  }
+  const fromDate = parseDate(from);
+  const toDate = parseDate(to);
+
   const party = await prisma.party.findUnique({ where: { id: partyId } });
   if (!party) return NextResponse.json({ error: 'Party not found' }, { status: 404 });
 
@@ -27,14 +35,14 @@ export async function GET(
     prisma.purchaseEntry.findMany({
       where: {
         partyId, reversed: false,
-        date: { gte: from ? new Date(from) : undefined, lte: to ? new Date(to) : undefined },
+        date: { gte: fromDate, lte: toDate },
       },
       orderBy: { date: 'asc' },
     }),
     prisma.payment.findMany({
       where: {
         partyId, reversed: false,
-        date: { gte: from ? new Date(from) : undefined, lte: to ? new Date(to) : undefined },
+        date: { gte: fromDate, lte: toDate },
       },
       orderBy: { date: 'asc' },
       include: { cashExExpense: true },
@@ -589,14 +597,44 @@ table.statement-table tfoot td:last-child {
 }
 
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script>
+function downloadPdfFile() {
+  const btn = document.querySelector('.download-btn');
+  if (btn) { btn.innerHTML = '⏳ Generating PDF...'; btn.disabled = true; }
+
+  const toolbar = document.querySelector('.no-print');
+  if (toolbar) toolbar.style.display = 'none';
+
+  const opt = {
+    margin: [10, 10, 15, 10],
+    filename: '${(party.name || 'Statement').replace(/[^a-zA-Z0-9]/g, '_')}_Statement.pdf',
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: { scale: 2, useCORS: true, letterRendering: true, backgroundColor: '#ffffff' },
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+  };
+
+  html2pdf().set(opt).from(document.body).save().then(() => {
+    if (toolbar) toolbar.style.display = 'flex';
+    if (btn) { btn.innerHTML = '📥 Download PDF File'; btn.disabled = false; }
+  }).catch((err) => {
+    console.error(err);
+    if (toolbar) toolbar.style.display = 'flex';
+    if (btn) { btn.innerHTML = '📥 Download PDF File'; btn.disabled = false; }
+    alert('PDF direct download failed. Opening system print dialog instead.');
+    window.print();
+  });
+}
+</script>
 </head>
 <body>
 
 <div class="no-print">
+  <button class="print-btn download-btn" style="background:#15803d;" onclick="downloadPdfFile()">📥 Download PDF File</button>
   <button class="print-btn" onclick="window.print()">🖨️ Print / Save as PDF</button>
   <button class="close-btn" onclick="window.close()">✕ Close</button>
   <span style="font-size: 11px; color: #64748b; margin-left: 10px;">
-    Tip: For exact look, ensure <em>Background graphics</em> is checked in print dialog.
+    Tip: "Download PDF" pe click karke seedhe .pdf file save karein.
   </span>
 </div>
 

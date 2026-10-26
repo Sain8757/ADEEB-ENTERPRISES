@@ -81,7 +81,8 @@ export default function PartyDetailPage() {
       <div style={{ padding: 8, maxWidth: 700 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
           <div className='section-heading' style={{ marginBottom: 0 }}>👤 {party.name}</div>
-          <div style={{ display: 'flex', gap: 6 }}>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <a href={`/api/statement/${partyId}/pdf`} target='_blank' rel='noreferrer' className='win95-btn' style={{ textDecoration: 'none' }}>🖨️ PDF Statement</a>
             <Link href={`/ledger/${partyId}`} className='win95-btn' style={{ textDecoration: 'none' }}>📒 View Ledger</Link>
             <Link href={`/purchases/new?partyId=${partyId}`} className='win95-btn win95-btn-primary' style={{ textDecoration: 'none' }}>🐃 New Purchase</Link>
             <Link href={`/payments/new?partyId=${partyId}`} className='win95-btn win95-btn-primary' style={{ textDecoration: 'none' }}>💰 New Payment</Link>
