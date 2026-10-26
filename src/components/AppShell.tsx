@@ -78,6 +78,9 @@ export default function AppShell({
           <button className="toolbar-btn" onClick={() => router.push("/payments/new")} title="New Payment">
             💰 <span className="label"> New Payment</span>
           </button>
+          <button className="toolbar-btn" onClick={() => router.push("/cash-ex/new")} title="New Cash EX">
+            💸 <span className="label"> New Cash EX</span>
+          </button>
           <div className="toolbar-separator" />
           <button className="toolbar-btn" onClick={() => router.push("/reports")} title="Reports">
             📊 <span className="label"> Reports</span>

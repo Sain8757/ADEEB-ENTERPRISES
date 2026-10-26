@@ -119,8 +119,8 @@ export default function DashboardPage() {
             <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
               <a href='/purchases/new' className='win95-btn win95-btn-primary' style={{ textDecoration: 'none', display: 'inline-block' }}>🐃 New Purchase</a>
               <a href='/payments/new' className='win95-btn win95-btn-primary' style={{ textDecoration: 'none', display: 'inline-block' }}>💰 New Payment</a>
+              <a href='/cash-ex/new' className='win95-btn win95-btn-primary' style={{ textDecoration: 'none', display: 'inline-block' }}>💸 New Cash EX</a>
               <a href='/parties' className='win95-btn' style={{ textDecoration: 'none', display: 'inline-block' }}>👥 Parties</a>
-              <a href='/import' className='win95-btn' style={{ textDecoration: 'none', display: 'inline-block' }}>📄 Import PDF</a>
               <a href='/reports' className='win95-btn' style={{ textDecoration: 'none', display: 'inline-block' }}>📊 Reports</a>
             </div>
 

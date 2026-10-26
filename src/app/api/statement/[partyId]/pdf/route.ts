@@ -65,7 +65,7 @@ export async function GET(
     }
   }
 
-  const [purchases, payments] = await Promise.all([
+  const [purchases, payments, directCashExList] = await Promise.all([
     prisma.purchaseEntry.findMany({
       where: {
         partyId, reversed: false,
@@ -80,6 +80,15 @@ export async function GET(
       },
       orderBy: { date: 'asc' },
       include: { cashExExpense: true },
+    }),
+    prisma.cashExExpense.findMany({
+      where: {
+        partyId,
+        reversed: false,
+        paymentId: null, // standalone cash ex not tied to a payment
+        date: { gte: fromDate, lte: toDate },
+      },
+      orderBy: { date: 'asc' },
     }),
   ]);
 
@@ -133,11 +142,21 @@ export async function GET(
   // CR = negative (payable / credit), DR = positive (receivable)
   const closingSigned = openingSigned.plus(totalPurchases).minus(totalPayments).plus(totalPaid);
 
+  const paymentCashExTotal = payments.reduce((s, p) => {
+    return p.cashExExpense ? s.plus(new Decimal(p.cashExExpense.expenseAmount.toString())) : s;
+  }, new Decimal(0));
+  const directCashExTotal = directCashExList.reduce((s, c) => {
+    return s.plus(new Decimal(c.expenseAmount.toString()));
+  }, new Decimal(0));
+  const totalCashEx = paymentCashExTotal.plus(directCashExTotal);
+
   const statementHtml = generateStatementHtml({
     business,
     party,
     purchases,
     payments,
+    directCashExList,
+    totalCashEx,
     from,
     to,
     openingSigned,
@@ -221,6 +240,7 @@ function fmtIsoDate(d: Date | string): string {
 function generateStatementHtml(data: any): string {
   const {
     business, party, purchases, payments,
+    directCashExList = [], totalCashEx = new Decimal(0),
     from, to,
     openingSigned, closingSigned,
     totalPurchases, totalPayments,
@@ -230,11 +250,12 @@ function generateStatementHtml(data: any): string {
 
   const DISCLAIMER = 'Computer-generated statement of account. Not a tax invoice.';
 
-  // Build sorted combined rows
-  type Row = { date: Date; isPayment: boolean; p?: any; pay?: any };
+  // Build sorted combined rows (Purchases, Payments, and direct Cash EX)
+  type Row = { date: Date; kind: 'PURCHASE' | 'PAYMENT' | 'CASHEX'; p?: any; pay?: any; cex?: any };
   const allRows: Row[] = [
-    ...purchases.map((p: any) => ({ date: p.date, isPayment: false, p })),
-    ...payments.map((p: any) => ({ date: p.date, isPayment: true, pay: p })),
+    ...purchases.map((p: any) => ({ date: p.date, kind: 'PURCHASE' as const, p })),
+    ...payments.map((p: any) => ({ date: p.date, kind: 'PAYMENT' as const, pay: p })),
+    ...directCashExList.map((c: any) => ({ date: c.date, kind: 'CASHEX' as const, cex: c })),
   ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
   // Extract receipt numbers
@@ -245,7 +266,7 @@ function generateStatementHtml(data: any): string {
 
   // Build table body rows
   const tableRows = allRows.map(row => {
-    if (!row.isPayment) {
+    if (row.kind === 'PURCHASE') {
       const p = row.p;
       const cat = p.category === 'BC' ? 'B/C' : p.category === 'SC' ? 'S/C' : p.category === 'VC_HISTORICAL' ? 'V/C' : '';
       
@@ -270,7 +291,7 @@ function generateStatementHtml(data: any): string {
         <td class="col-amount">${fmtNum(p.amount, 0)}</td>
         <td class="col-payment"></td>
       </tr>`;
-    } else {
+    } else if (row.kind === 'PAYMENT') {
       const pay = row.pay;
       if (pay.direction !== 'RECEIVED') return '';
 
@@ -285,6 +306,9 @@ function generateStatementHtml(data: any): string {
       const subParts: string[] = [mLabel];
       if (pay.notes) subParts.push(pay.notes);
       if (pay.bankRef) subParts.push(pay.bankRef);
+      if (pay.cashExExpense) {
+        subParts.push(`Cash EX: ₹${fmtNum(pay.cashExExpense.expenseAmount, 0)}`);
+      }
 
       return `<tr>
         <td class="col-date">
@@ -298,6 +322,22 @@ function generateStatementHtml(data: any): string {
         <td class="col-rate"></td>
         <td class="col-amount"></td>
         <td class="col-payment green-val">${fmtNum(pay.amount, 0)}</td>
+      </tr>`;
+    } else {
+      // Standalone Cash EX row
+      const cex = row.cex;
+      return `<tr>
+        <td class="col-date">
+          <div class="main-date">${fmtDateShort(cex.date)}</div>
+          <div class="sub-text">CASH EX · ${cex.overrideReason || `On ₹${fmtNum(cex.cashAmount, 0)} Cash`}</div>
+        </td>
+        <td class="col-qty"></td>
+        <td class="col-cat"></td>
+        <td class="col-weight"></td>
+        <td class="col-avg"></td>
+        <td class="col-rate"></td>
+        <td class="col-amount"></td>
+        <td class="col-payment" style="color:#800000; font-size:10.5px; font-weight:bold;">₹${fmtNum(cex.expenseAmount, 0)} exp.</td>
       </tr>`;
     }
   }).join('');
@@ -317,6 +357,9 @@ function generateStatementHtml(data: any): string {
   const methodParts = Object.entries(methodBreakdown).map(
     ([m, val]) => `${methodLabels[m] ?? m} ${fmtNum(val as Decimal, 0)}`
   );
+  if (totalCashEx && totalCashEx.gt(0)) {
+    methodParts.push(`Cash EX ₹${fmtNum(totalCashEx, 0)}`);
+  }
   const methodsLine = methodParts.join('  ·  ');
 
   // Date range formatted
@@ -334,7 +377,7 @@ function generateStatementHtml(data: any): string {
   const paymentsFormulaStr = fmtNum(totalPayments, 2);
   const closingResultStr = fmtBalFullDecimal(closingSigned);
 
-  const whatsappText = `*${business?.name ?? 'ADEEB ENTERPRISES'}*\n*Hisab Statement — ${party.name}*\nPeriod: ${periodBoxStr}\n---------------------------------\nKharid (Purchases): ₹${fmtNum(totalPurchases, 0)} (${totalQty} Buffaloes, ${fmtNum(totalWeight, 1)} kg)\nJama (Payments): ₹${fmtNum(totalPayments, 0)}\n*Net Balance: ${fmtBalWithSymbol(closingSigned)}*\n---------------------------------\nComputer-generated statement.`;
+  const whatsappText = `*${business?.name ?? 'ADEEB ENTERPRISES'}*\n*Hisab Statement — ${party.name}*\nPeriod: ${periodBoxStr}\n---------------------------------\nKharid (Purchases): ₹${fmtNum(totalPurchases, 0)} (${totalQty} Buffaloes, ${fmtNum(totalWeight, 1)} kg)\nJama (Payments): ₹${fmtNum(totalPayments, 0)}${totalCashEx && totalCashEx.gt(0) ? `\nCash EX (Firm): ₹${fmtNum(totalCashEx, 0)}` : ''}\n*Net Balance: ${fmtBalWithSymbol(closingSigned)}*\n---------------------------------\nComputer-generated statement.`;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -718,6 +761,11 @@ function downloadPdfFile() {
         <span class="stat-label">CLOSING BAL.</span>
         <span class="stat-val closing">${fmtBalWithSymbol(closingSigned)}</span>
       </div>
+      ${totalCashEx && totalCashEx.gt(0) ? `
+      <div class="stat-row">
+        <span class="stat-label">CASH EX (FIRM)</span>
+        <span class="stat-val" style="color:#800000; font-weight:bold;">₹${fmtNum(totalCashEx, 0)}</span>
+      </div>` : ''}
       <div class="stat-row">
         <span class="stat-label">PERIOD</span>
         <span class="stat-val period-text">${periodBoxStr}</span>

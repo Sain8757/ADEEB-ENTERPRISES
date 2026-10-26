@@ -2,7 +2,7 @@
 // ADEEB ENTERPRISES — All-in-One Party Hub
 // Unifies Party Ledger, Purchases, Payments, Cash EX, and Profile into a single seamless screen.
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, Suspense } from 'react';
 import { useSession } from 'next-auth/react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import AppShell from '@/components/AppShell';
@@ -28,7 +28,7 @@ function toIsoDate(d: Date) {
   return `${y}-${m}-${day}`;
 }
 
-export default function PartyLedgerHubPage() {
+function PartyLedgerHubContent() {
   const { data: session } = useSession();
   const role = (session?.user as any)?.role;
   const params = useParams();
@@ -83,8 +83,14 @@ export default function PartyLedgerHubPage() {
   const [deletingPaymentState, setDeletingPaymentState] = useState(false);
 
   // ── Cash EX Modal State ──────────────────────────────
+  const [expenseModalOpen, setExpenseModalOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<any | null>(null);
-  const [expenseForm, setExpenseForm] = useState({ expenseAmount: '', overrideReason: '' });
+  const [expenseForm, setExpenseForm] = useState({
+    date: toIsoDate(new Date()),
+    cashAmount: '',
+    expenseAmount: '',
+    overrideReason: '',
+  });
   const [savingExpense, setSavingExpense] = useState(false);
   const [deletingExpense, setDeletingExpense] = useState<any | null>(null);
   const [deletingExpenseState, setDeletingExpenseState] = useState(false);
@@ -350,34 +356,53 @@ export default function PartyLedgerHubPage() {
   }
 
   // ── Cash EX Handlers ─────────────────────────────────
+  function openNewExpenseModal() {
+    setEditingExpense(null);
+    setExpenseForm({
+      date: toIsoDate(new Date()),
+      cashAmount: '',
+      expenseAmount: '',
+      overrideReason: '',
+    });
+    setExpenseModalOpen(true);
+  }
+
   function startEditExpense(e: any) {
     setEditingExpense(e);
     setExpenseForm({
+      date: toIsoDate(new Date(e.date)),
+      cashAmount: String(e.cashAmount),
       expenseAmount: String(e.expenseAmount),
       overrideReason: e.overrideReason || '',
     });
+    setExpenseModalOpen(true);
   }
 
   async function handleSaveExpense(e: React.FormEvent) {
     e.preventDefault();
-    if (!editingExpense) return;
     setSavingExpense(true);
     setError(''); setSuccess('');
     try {
-      const res = await fetch(`/api/cash-ex/${editingExpense.id}`, {
-        method: 'PATCH',
+      const url = editingExpense ? `/api/cash-ex/${editingExpense.id}` : `/api/cash-ex`;
+      const method = editingExpense ? 'PATCH' : 'POST';
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          partyId,
+          date: expenseForm.date,
+          cashAmount: expenseForm.cashAmount,
           expenseAmount: expenseForm.expenseAmount,
           overrideReason: expenseForm.overrideReason || undefined,
         }),
       });
-      if (!res.ok) throw new Error('Failed to update Cash EX');
-      setSuccess('Cash EX expense updated.');
+      if (!res.ok) throw new Error('Failed to save Cash EX');
+      setSuccess(editingExpense ? 'Cash EX expense updated.' : 'Cash EX expense added for this party.');
+      setExpenseModalOpen(false);
       setEditingExpense(null);
       load();
     } catch (err: any) {
-      setError(err.message || 'Error updating Cash EX');
+      setError(err.message || 'Error saving Cash EX');
     } finally {
       setSavingExpense(false);
     }
@@ -495,6 +520,13 @@ export default function PartyLedgerHubPage() {
                       style={{ fontWeight: 'bold' }}
                     >
                       💰 + Jama Paisa
+                    </button>
+                    <button
+                      className='win95-btn win95-btn-primary'
+                      onClick={openNewExpenseModal}
+                      style={{ fontWeight: 'bold' }}
+                    >
+                      💸 + Cash EX
                     </button>
                   </>
                 )}
@@ -863,6 +895,15 @@ export default function PartyLedgerHubPage() {
             {/* ── TAB 4: CASH EX ── */}
             {activeTab === 'cashex' && (
               <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <div style={{ fontSize: 12, fontWeight: 'bold' }}>💸 Cash EX for {party.name}</div>
+                  {role !== 'VIEWER' && (
+                    <button className='win95-btn win95-btn-primary' onClick={openNewExpenseModal}>
+                      ➕ New Cash EX
+                    </button>
+                  )}
+                </div>
+
                 <div className='alert-box info' style={{ marginBottom: 8 }}>
                   <strong>Cash EX Rule:</strong> Cash EX is a SEPARATE firm business expense (₹200 per ₹1,00,000 cash received).
                   It is recorded here for firm accounting and does NOT reduce the party balance.
@@ -1279,42 +1320,73 @@ export default function PartyLedgerHubPage() {
               </div>
             )}
 
-            {/* ── EDIT CASH EX MODAL ── */}
-            {editingExpense && (
+            {/* ── CASH EX MODAL (Add / Edit) ── */}
+            {expenseModalOpen && (
               <div className='modal-overlay'>
-                <div className='modal-window' style={{ width: 380 }}>
+                <div className='modal-window' style={{ width: 420 }}>
                   <div className='title-bar'>
-                    <span className='title-bar-text'>✏️ Edit Cash EX Expense</span>
-                    <button style={{ background: '#c0c0c0', border: '1px solid #808080', cursor: 'pointer', fontSize: 10 }} onClick={() => setEditingExpense(null)}>✕</button>
+                    <span className='title-bar-text'>
+                      {editingExpense ? '✏️ Edit Cash EX' : '💸 + New Cash EX'} — {party.name}
+                    </span>
+                    <button style={{ background: '#c0c0c0', border: '1px solid #808080', cursor: 'pointer', fontSize: 10 }} onClick={() => setExpenseModalOpen(false)}>✕</button>
                   </div>
                   <form onSubmit={handleSaveExpense}>
                     <div className='modal-body' style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      <div style={{ fontSize: 11, background: '#f8fafc', padding: 8, border: '1px solid #cbd5e1' }}>
-                        <div><strong>Party:</strong> {party.name}</div>
-                        <div><strong>Cash Amount:</strong> {fmt(editingExpense.cashAmount)}</div>
+                      <div className='form-row'>
+                        <div className='form-field' style={{ flex: 1 }}>
+                          <label className='form-label'>Date *</label>
+                          <input
+                            className='win95-input' type='date'
+                            value={expenseForm.date}
+                            onChange={e => setExpenseForm(f => ({ ...f, date: e.target.value }))}
+                            required
+                          />
+                        </div>
+                        <div className='form-field' style={{ flex: 1 }}>
+                          <label className='form-label'>Cash Received (₹) *</label>
+                          <input
+                            className='win95-input' type='number' step='0.01'
+                            value={expenseForm.cashAmount}
+                            onChange={e => {
+                              const val = e.target.value;
+                              const auto = (parseFloat(val || '0') * 200) / 100000;
+                              setExpenseForm(f => ({
+                                ...f,
+                                cashAmount: val,
+                                expenseAmount: f.expenseAmount && f.expenseAmount !== '0' ? f.expenseAmount : String(auto),
+                              }));
+                            }}
+                            placeholder='e.g. 100000'
+                            required
+                          />
+                        </div>
                       </div>
+
                       <div className='form-field'>
-                        <label className='form-label'>Expense Amount (₹) *</label>
+                        <label className='form-label'>Expense Amount (₹) * (Auto: ₹200 / Lakh)</label>
                         <input
                           className='win95-input' type='number' step='0.01'
                           value={expenseForm.expenseAmount}
                           onChange={e => setExpenseForm(f => ({ ...f, expenseAmount: e.target.value }))}
+                          placeholder='e.g. 200'
                           required
                         />
                       </div>
+
                       <div className='form-field'>
-                        <label className='form-label'>Override Reason (Optional)</label>
+                        <label className='form-label'>Override Reason / Note (Optional)</label>
                         <input
                           className='win95-input'
                           value={expenseForm.overrideReason}
                           onChange={e => setExpenseForm(f => ({ ...f, overrideReason: e.target.value }))}
+                          placeholder='e.g. Mandi cash expense'
                         />
                       </div>
                     </div>
                     <div className='modal-footer' style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: 8 }}>
-                      <button type='button' className='win95-btn' onClick={() => setEditingExpense(null)}>Cancel</button>
+                      <button type='button' className='win95-btn' onClick={() => setExpenseModalOpen(false)}>Cancel</button>
                       <button type='submit' className='win95-btn win95-btn-primary' disabled={savingExpense}>
-                        {savingExpense ? 'Saving...' : '💾 Save Changes'}
+                        {savingExpense ? 'Saving...' : '💾 Save Cash EX'}
                       </button>
                     </div>
                   </form>
@@ -1373,5 +1445,13 @@ export default function PartyLedgerHubPage() {
         )}
       </div>
     </AppShell>
+  );
+}
+
+export default function PartyLedgerHubPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: 20 }}>Loading party workspace...</div>}>
+      <PartyLedgerHubContent />
+    </Suspense>
   );
 }

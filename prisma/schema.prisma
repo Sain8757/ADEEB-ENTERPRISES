@@ -123,6 +123,7 @@ model Party {
   payments      Payment[]
   ledgerEntries LedgerEntry[]
   importBatches ImportBatch[]
+  cashExExpenses CashExExpense[]
 
   @@index([name])
 }
@@ -201,12 +202,13 @@ model Payment {
 
 model CashExExpense {
   id                String    @id @default(cuid())
-  paymentId         String    @unique  // links to the eligible cash RECEIVED payment
+  partyId           String?
+  paymentId         String?   @unique  // links to eligible payment if created from payment
   date              DateTime
   cashAmount        Decimal   @db.Decimal(15, 2)  // the cash received amount
   expenseAmount     Decimal   @db.Decimal(15, 2)  // = cashAmount * rate / basis
-  rateApplied       Decimal   @db.Decimal(10, 4)  // e.g. 200
-  basisApplied      Decimal   @db.Decimal(12, 2)  // e.g. 100000
+  rateApplied       Decimal   @default(200) @db.Decimal(10, 4)  // e.g. 200
+  basisApplied      Decimal   @default(100000) @db.Decimal(12, 2)  // e.g. 100000
   overrideAmount    Decimal?  @db.Decimal(15, 2)  // if user manually overrode
   overrideReason    String?
   confirmedById     String?
@@ -217,10 +219,12 @@ model CashExExpense {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  payment     Payment @relation(fields: [paymentId], references: [id])
-  confirmedBy User?   @relation(fields: [confirmedById], references: [id])
+  party       Party?   @relation(fields: [partyId], references: [id])
+  payment     Payment? @relation(fields: [paymentId], references: [id])
+  confirmedBy User?    @relation(fields: [confirmedById], references: [id])
 
   @@index([date])
+  @@index([partyId])
 }
 
 // ─────────────────────────────────────────────

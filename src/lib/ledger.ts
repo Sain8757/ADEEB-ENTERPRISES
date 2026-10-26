@@ -138,6 +138,7 @@ export async function postPayment(
 
       cashExExpense = await tx.cashExExpense.create({
         data: {
+          partyId: payment.partyId,
           paymentId: payment.id,
           date: payment.date,
           cashAmount: payment.amount.toString(),
@@ -445,6 +446,7 @@ export async function createPaymentEntry(data: {
 
       cashExExpense = await tx.cashExExpense.create({
         data: {
+          partyId: data.partyId,
           paymentId: payment.id,
           date: data.date,
           cashAmount: data.amount,
@@ -806,8 +808,49 @@ export async function deletePaymentEntry(id: string, userId?: string): Promise<v
 }
 
 // ─────────────────────────────────────────────
-// UPDATE / DELETE CASH EX EXPENSE
+// CREATE / UPDATE / DELETE CASH EX EXPENSE
 // ─────────────────────────────────────────────
+
+export async function createCashExEntry(data: {
+  date: Date;
+  partyId?: string;
+  cashAmount: string;
+  expenseAmount?: string;
+  rateApplied?: string;
+  basisApplied?: string;
+  overrideReason?: string;
+  userId?: string;
+}): Promise<CashExExpense> {
+  const rate = data.rateApplied ? parseFloat(data.rateApplied) : 200;
+  const basis = data.basisApplied ? parseFloat(data.basisApplied) : 100000;
+  const autoResult = calcCashEx({ cashReceived: data.cashAmount, rate, basis });
+  const finalExpenseAmount = data.expenseAmount && parseFloat(data.expenseAmount) > 0
+    ? new Decimal(data.expenseAmount).toFixed(2)
+    : autoResult.expenseAmount.toFixed(2);
+
+  const expense = await prisma.cashExExpense.create({
+    data: {
+      partyId: data.partyId,
+      date: data.date,
+      cashAmount: data.cashAmount,
+      expenseAmount: finalExpenseAmount,
+      rateApplied: String(rate),
+      basisApplied: String(basis),
+      overrideReason: data.overrideReason,
+      confirmedById: data.userId,
+    },
+  });
+
+  await audit({
+    userId: data.userId,
+    action: AUDIT_ACTIONS.CREATE,
+    entity: "CashExExpense",
+    entityId: expense.id,
+    after: expense as unknown as object,
+  });
+
+  return expense;
+}
 
 export async function updateCashExExpense(id: string, data: {
   expenseAmount: string;
