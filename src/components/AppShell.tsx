@@ -1,6 +1,6 @@
 "use client";
 // ADEEB ENTERPRISES — Main application shell
-// Clean modern layout with Title bar, Quick Toolbar, Focused Sidebar (5 items), Workspace, and Status bar.
+// Focused Top Navbar (5 items: Dashboard, Parties, Reports, Trash Bin, Settings), Full-Width Workspace (NO sidebar), and Status Bar.
 
 import { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
@@ -15,7 +15,7 @@ interface AppShellProps {
   statusText?: string;
 }
 
-// Sidebar: ONLY Dashboard, Parties, Reports, Trash Bin, Settings as requested
+// Navigation: ONLY Dashboard, Parties, Reports, Trash Bin, Settings
 const NAV_ITEMS = [
   { label: "Dashboard", href: "/dashboard", icon: "🏠" },
   { label: "Parties",   href: "/parties",   icon: "👥" },
@@ -67,53 +67,43 @@ export default function AppShell({
           <button className="title-btn" title="Close">✕</button>
         </div>
 
-        {/* ── TOOLBAR (Quick Access) ────────────── */}
-        <div className="toolbar" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px' }}>
-          <button className="toolbar-btn" onClick={() => router.push("/parties")} title="Parties (Vyapari)">
-            👥 <span className="label"> Parties</span>
-          </button>
-          <button className="toolbar-btn" onClick={() => router.push("/purchases/new")} title="New Purchase">
-            🐃 <span className="label"> New Purchase</span>
-          </button>
-          <button className="toolbar-btn" onClick={() => router.push("/payments/new")} title="New Payment">
-            💰 <span className="label"> New Payment</span>
-          </button>
-          <button className="toolbar-btn" onClick={() => router.push("/cash-ex/new")} title="New Cash EX">
-            💸 <span className="label"> New Cash EX</span>
-          </button>
-          <div className="toolbar-separator" />
-          <button className="toolbar-btn" onClick={() => router.push("/reports")} title="Reports">
-            📊 <span className="label"> Reports</span>
-          </button>
-          <button className="toolbar-btn" onClick={() => router.push("/trash")} title="Trash Bin">
-            🗑️ <span className="label"> Trash Bin</span>
-          </button>
-          <button className="toolbar-btn" onClick={() => router.push("/settings")} title="Settings">
-            ⚙️ <span className="label"> Settings</span>
-          </button>
+        {/* ── TOP NAVBAR (Main Navigation: Dashboard, Parties, Reports, Trash Bin, Settings) ── */}
+        <div className="toolbar top-nav-bar" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px', overflowX: 'auto', flexWrap: 'nowrap' }}>
+          {NAV_ITEMS.map((item) => {
+            const isActive = item.href === '/dashboard'
+              ? pathname === '/dashboard'
+              : pathname?.startsWith(item.href) || (item.href === '/parties' && pathname?.startsWith('/ledger'));
+            return (
+              <button
+                key={item.href}
+                className={`toolbar-btn ${isActive ? 'active' : ''}`}
+                onClick={() => router.push(item.href)}
+                title={item.label}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '5px 14px',
+                  fontWeight: isActive ? 'bold' : 'normal',
+                  background: isActive ? '#000080' : undefined,
+                  color: isActive ? '#ffffff' : undefined,
+                  borderRadius: '3px',
+                  fontSize: '12px',
+                  flexShrink: 0,
+                  whiteSpace: 'nowrap',
+                  cursor: 'pointer',
+                }}
+              >
+                <span style={{ fontSize: '14px' }}>{item.icon}</span>
+                <span className="label">{item.label}</span>
+              </button>
+            );
+          })}
         </div>
 
-        {/* ── BODY (sidebar + workspace) ─────────── */}
+        {/* ── BODY (Workspace full width — NO sidebar) ─────────── */}
         <div className="app-body">
-          {/* Sidebar (Clean 5 items) */}
-          <nav className="sidebar">
-            <div className="sidebar-section">
-              <div className="sidebar-heading">Workspace</div>
-              {NAV_ITEMS.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`sidebar-link ${pathname?.startsWith(item.href) && item.href !== "/dashboard" ? "active" : pathname === item.href ? "active" : ""}`}
-                >
-                  <span>{item.icon}</span>
-                  <span>{item.label}</span>
-                </Link>
-              ))}
-            </div>
-          </nav>
-
-          {/* Workspace */}
-          <main className="workspace">
+          <main className="workspace" style={{ width: '100%', flex: 1, padding: '8px' }}>
             {children}
           </main>
         </div>
@@ -136,43 +126,23 @@ export default function AppShell({
           <div className="status-panel">{time}</div>
         </div>
 
-        {/* ── MOBILE BOTTOM NAVIGATION (iPhone & Android thumb navigation) ── */}
+        {/* ── MOBILE BOTTOM NAVIGATION (iPhone & Android 100% thumb navigation) ── */}
         <nav className="mobile-bottom-nav">
-          <Link
-            href="/dashboard"
-            className={`mobile-nav-item ${pathname === "/dashboard" ? "active" : ""}`}
-          >
-            <span className="mobile-nav-icon">🏠</span>
-            <span className="mobile-nav-label">Home</span>
-          </Link>
-          <Link
-            href="/parties"
-            className={`mobile-nav-item ${pathname?.startsWith("/parties") || pathname?.startsWith("/ledger") ? "active" : ""}`}
-          >
-            <span className="mobile-nav-icon">👥</span>
-            <span className="mobile-nav-label">Parties</span>
-          </Link>
-          <Link
-            href="/purchases/new"
-            className={`mobile-nav-item mobile-nav-action ${pathname === "/purchases/new" ? "active" : ""}`}
-          >
-            <span className="mobile-nav-icon">➕</span>
-            <span className="mobile-nav-label">Kharid</span>
-          </Link>
-          <Link
-            href="/reports"
-            className={`mobile-nav-item ${pathname?.startsWith("/reports") ? "active" : ""}`}
-          >
-            <span className="mobile-nav-icon">📊</span>
-            <span className="mobile-nav-label">Reports</span>
-          </Link>
-          <Link
-            href="/settings"
-            className={`mobile-nav-item ${pathname === "/settings" ? "active" : ""}`}
-          >
-            <span className="mobile-nav-icon">⚙️</span>
-            <span className="mobile-nav-label">Settings</span>
-          </Link>
+          {NAV_ITEMS.map((item) => {
+            const isActive = item.href === '/dashboard'
+              ? pathname === '/dashboard'
+              : pathname?.startsWith(item.href) || (item.href === '/parties' && pathname?.startsWith('/ledger'));
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`mobile-nav-item ${isActive ? "active" : ""}`}
+              >
+                <span className="mobile-nav-icon">{item.icon}</span>
+                <span className="mobile-nav-label">{item.label}</span>
+              </Link>
+            );
+          })}
         </nav>
       </div>
     </div>

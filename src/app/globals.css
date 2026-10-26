@@ -265,6 +265,16 @@ html, body {
   cursor: default;
 }
 
+.toolbar-btn.active {
+  background: #000080 !important;
+  color: #ffffff !important;
+  border-top:    2px solid var(--win95-border-darker) !important;
+  border-left:   2px solid var(--win95-border-darker) !important;
+  border-right:  2px solid var(--win95-border-light) !important;
+  border-bottom: 2px solid var(--win95-border-light) !important;
+  font-weight: bold;
+}
+
 .toolbar-separator {
   width: 2px;
   height: 20px;
@@ -866,20 +876,26 @@ html, body {
     display: none !important;
   }
 
-  /* Horizontal scrollable quick toolbar at top */
+  /* Horizontal scrollable quick navbar at top */
   .toolbar {
-    padding: 3px 4px;
-    gap: 4px;
+    padding: 6px 8px;
+    gap: 6px;
     flex-wrap: nowrap;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
     border-bottom: 2px solid var(--win95-border-dark);
   }
+  .toolbar::-webkit-scrollbar {
+    display: none;
+  }
   .toolbar-btn {
-    padding: 4px 8px;
-    font-size: 11px;
+    padding: 6px 12px;
+    font-size: 12px;
     flex-shrink: 0;
-    min-height: 28px;
+    min-height: 36px;
+    border-radius: 4px;
+    touch-action: manipulation;
   }
   .toolbar-separator {
     display: none;
