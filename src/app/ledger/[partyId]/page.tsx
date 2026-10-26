@@ -213,10 +213,20 @@ function PartyLedgerHubContent() {
   // WhatsApp Link
   const whatsappUrl = useMemo(() => {
     if (!party) return '';
-    const phone = party.mobile ? party.mobile.replace(/[^0-9]/g, '') : '';
+    const raw = party.mobile ? party.mobile.replace(/[^0-9]/g, '') : '';
+    const phone = raw.length === 10
+      ? `91${raw}`
+      : raw.length === 12 && raw.startsWith('91')
+        ? raw
+        : raw.startsWith('0') && raw.length === 11
+          ? `91${raw.slice(1)}`
+          : raw;
     const dateRangeStr = from && to ? `${from} se ${to}` : 'Shuru se Aaj tak';
-    const text = `*ADEEB ENTERPRISES*\n*Khata Parcha — ${party.name}*\nTareekh: ${dateRangeStr}\n---------------------------------\nKharid (Debits): ${fmt(totalPeriodDebits)}\nJama (Credits): ${fmt(totalPeriodCredits)}\n*Baki Hisab (Balance Due): ${fmt(Math.abs(lastBal))} ${balDir}*\n---------------------------------\nComputer-generated statement.`;
-    return `https://api.whatsapp.com/send?${phone ? `phone=${phone}&` : ''}text=${encodeURIComponent(text)}`;
+    const statementUrl = typeof window !== 'undefined'
+      ? `${window.location.origin}/api/statement/${party.id}/pdf${from || to ? `?from=${from || ''}&to=${to || ''}` : ''}`
+      : '';
+    const text = `*ADEEB ENTERPRISES*\n*Khata Parcha — ${party.name}*\nTareekh: ${dateRangeStr}\n---------------------------------\nKharid (Debits): ${fmt(totalPeriodDebits)}\nJama (Credits): ${fmt(totalPeriodCredits)}\n*Baki Hisab (Balance Due): ${fmt(Math.abs(lastBal))} ${balDir}*\n---------------------------------\n📄 Online PDF Statement:\n${statementUrl}\n---------------------------------\nComputer-generated statement.`;
+    return `https://api.whatsapp.com/send?${phone ? `phone=${encodeURIComponent(phone)}&` : ''}text=${encodeURIComponent(text)}`;
   }, [party, from, to, totalPeriodDebits, totalPeriodCredits, lastBal, balDir]);
 
   // ── Purchase Handlers ────────────────────────────────
