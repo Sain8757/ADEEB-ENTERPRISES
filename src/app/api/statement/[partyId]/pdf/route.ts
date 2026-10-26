@@ -107,9 +107,14 @@ export async function GET(
   const totalPurchases = purchases.reduce(
     (s, p) => s.plus(new Decimal(p.amount.toString())), new Decimal(0)
   );
+  const directCashExTotal = directCashExList.reduce((s, c) => {
+    return s.plus(new Decimal(c.expenseAmount.toString()));
+  }, new Decimal(0));
+
   const totalPayments = payments
     .filter(p => p.direction === 'RECEIVED')
-    .reduce((s, p) => s.plus(new Decimal(p.amount.toString())), new Decimal(0));
+    .reduce((s, p) => s.plus(new Decimal(p.amount.toString())), new Decimal(0))
+    .plus(directCashExTotal);
   const totalPaid = payments
     .filter(p => p.direction === 'PAID')
     .reduce((s, p) => s.plus(new Decimal(p.amount.toString())), new Decimal(0));
@@ -145,9 +150,6 @@ export async function GET(
   const paymentCashExTotal = payments.reduce((s, p) => {
     return p.cashExExpense ? s.plus(new Decimal(p.cashExExpense.expenseAmount.toString())) : s;
   }, new Decimal(0));
-  const directCashExTotal = directCashExList.reduce((s, c) => {
-    return s.plus(new Decimal(c.expenseAmount.toString()));
-  }, new Decimal(0));
   const totalCashEx = paymentCashExTotal.plus(directCashExTotal);
 
   const statementHtml = generateStatementHtml({
@@ -156,6 +158,7 @@ export async function GET(
     purchases,
     payments,
     directCashExList,
+    directCashExTotal,
     totalCashEx,
     from,
     to,
@@ -240,7 +243,7 @@ function fmtIsoDate(d: Date | string): string {
 function generateStatementHtml(data: any): string {
   const {
     business, party, purchases, payments,
-    directCashExList = [], totalCashEx = new Decimal(0),
+    directCashExList = [], directCashExTotal = new Decimal(0), totalCashEx = new Decimal(0),
     from, to,
     openingSigned, closingSigned,
     totalPurchases, totalPayments,
@@ -298,17 +301,14 @@ function generateStatementHtml(data: any): string {
       const methodLabels: Record<string, string> = {
         CASH: 'Cash',
         AC: 'A/C',
-        ADVANCE_JAMA: 'ADVANCE JAMA',
-        CASH_EX: 'CASH EX',
+        ADVANCE_JAMA: 'Advance Jama',
+        CASH_EX: 'Cash EX',
       };
-      const mLabel = methodLabels[pay.method] ?? pay.method;
+      const mLabel = methodLabels[pay.method] ?? (pay.method === 'CASH_EX' ? 'Cash EX' : pay.method);
 
       const subParts: string[] = [mLabel];
       if (pay.notes) subParts.push(pay.notes);
       if (pay.bankRef) subParts.push(pay.bankRef);
-      if (pay.cashExExpense) {
-        subParts.push(`Cash EX: ₹${fmtNum(pay.cashExExpense.expenseAmount, 0)}`);
-      }
 
       return `<tr>
         <td class="col-date">
@@ -326,10 +326,11 @@ function generateStatementHtml(data: any): string {
     } else {
       // Standalone Cash EX row
       const cex = row.cex;
+      const sub = cex.overrideReason ? `Cash EX · ${cex.overrideReason}` : 'Cash EX';
       return `<tr>
         <td class="col-date">
           <div class="main-date">${fmtDateShort(cex.date)}</div>
-          <div class="sub-text">CASH EX · ${cex.overrideReason || `On ₹${fmtNum(cex.cashAmount, 0)} Cash`}</div>
+          <div class="sub-text">${sub}</div>
         </td>
         <td class="col-qty"></td>
         <td class="col-cat"></td>
@@ -337,7 +338,7 @@ function generateStatementHtml(data: any): string {
         <td class="col-avg"></td>
         <td class="col-rate"></td>
         <td class="col-amount"></td>
-        <td class="col-payment" style="color:#800000; font-size:10.5px; font-weight:bold;">₹${fmtNum(cex.expenseAmount, 0)} exp.</td>
+        <td class="col-payment green-val">${fmtNum(cex.expenseAmount, 0)}</td>
       </tr>`;
     }
   }).join('');
@@ -351,14 +352,14 @@ function generateStatementHtml(data: any): string {
   const methodLabels: Record<string, string> = {
     CASH: 'Cash',
     AC: 'A/C',
-    ADVANCE_JAMA: 'ADVANCE JAMA',
-    CASH_EX: 'CASH EX',
+    ADVANCE_JAMA: 'Advance Jama',
+    CASH_EX: 'Cash EX',
   };
   const methodParts = Object.entries(methodBreakdown).map(
     ([m, val]) => `${methodLabels[m] ?? m} ${fmtNum(val as Decimal, 0)}`
   );
-  if (totalCashEx && totalCashEx.gt(0)) {
-    methodParts.push(`Cash EX ₹${fmtNum(totalCashEx, 0)}`);
+  if (directCashExTotal && directCashExTotal.gt(0) && !methodBreakdown['CASH_EX']) {
+    methodParts.push(`Cash EX ${fmtNum(directCashExTotal, 0)}`);
   }
   const methodsLine = methodParts.join('  ·  ');
 
@@ -377,7 +378,7 @@ function generateStatementHtml(data: any): string {
   const paymentsFormulaStr = fmtNum(totalPayments, 2);
   const closingResultStr = fmtBalFullDecimal(closingSigned);
 
-  const whatsappText = `*${business?.name ?? 'ADEEB ENTERPRISES'}*\n*Hisab Statement — ${party.name}*\nPeriod: ${periodBoxStr}\n---------------------------------\nKharid (Purchases): ₹${fmtNum(totalPurchases, 0)} (${totalQty} Buffaloes, ${fmtNum(totalWeight, 1)} kg)\nJama (Payments): ₹${fmtNum(totalPayments, 0)}${totalCashEx && totalCashEx.gt(0) ? `\nCash EX (Firm): ₹${fmtNum(totalCashEx, 0)}` : ''}\n*Net Balance: ${fmtBalWithSymbol(closingSigned)}*\n---------------------------------\nComputer-generated statement.`;
+  const whatsappText = `*${business?.name ?? 'ADEEB ENTERPRISES'}*\n*Hisab Statement — ${party.name}*\nPeriod: ${periodBoxStr}\n---------------------------------\nKharid (Purchases): ₹${fmtNum(totalPurchases, 0)} (${totalQty} Buffaloes, ${fmtNum(totalWeight, 1)} kg)\nJama (Payments): ₹${fmtNum(totalPayments, 0)}\n*Net Balance: ${fmtBalWithSymbol(closingSigned)}*\n---------------------------------\nComputer-generated statement.`;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -761,11 +762,6 @@ function downloadPdfFile() {
         <span class="stat-label">CLOSING BAL.</span>
         <span class="stat-val closing">${fmtBalWithSymbol(closingSigned)}</span>
       </div>
-      ${totalCashEx && totalCashEx.gt(0) ? `
-      <div class="stat-row">
-        <span class="stat-label">CASH EX (FIRM)</span>
-        <span class="stat-val" style="color:#800000; font-weight:bold;">₹${fmtNum(totalCashEx, 0)}</span>
-      </div>` : ''}
       <div class="stat-row">
         <span class="stat-label">PERIOD</span>
         <span class="stat-val period-text">${periodBoxStr}</span>

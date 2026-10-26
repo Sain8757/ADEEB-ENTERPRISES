@@ -11,13 +11,8 @@ const PAYMENT_METHODS = [
   { code: 'CASH', label: 'Cash' },
   { code: 'AC', label: 'A/C (Bank Transfer)' },
   { code: 'ADVANCE_JAMA', label: 'Advance Jama' },
+  { code: 'CASH_EX', label: 'Cash EX' },
 ];
-
-function calcCashEx(amount: string, rate = 200, basis = 100000): string {
-  const n = parseFloat(amount);
-  if (!n || n <= 0) return '0.00';
-  return ((n * rate) / basis).toFixed(2);
-}
 
 function fmt(v: string | number) {
   const n = parseFloat(String(v));
@@ -40,10 +35,6 @@ export default function NewPaymentPage() {
   const [parties, setParties] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [cashExRate, setCashExRate] = useState(200);
-  const [cashExBasis, setCashExBasis] = useState(100000);
-  const [applyCashEx, setApplyCashEx] = useState(true);
-  const [customCashExAmount, setCustomCashExAmount] = useState('');
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -58,17 +49,8 @@ export default function NewPaymentPage() {
     bankRef: '',
   });
 
-  const isCashReceived = form.direction === 'RECEIVED' && form.method === 'CASH';
-  const cashExAmount = isCashReceived && form.amount
-    ? calcCashEx(form.amount, cashExRate, cashExBasis)
-    : null;
-
   useEffect(() => {
     fetch('/api/parties').then(r => r.json()).then(d => setParties(Array.isArray(d) ? d : []));
-    fetch('/api/settings').then(r => r.json()).then(d => {
-      if (d.cashExRate) setCashExRate(parseFloat(d.cashExRate));
-      if (d.cashExBasis) setCashExBasis(parseFloat(d.cashExBasis));
-    }).catch(() => {});
   }, []);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -83,11 +65,7 @@ export default function NewPaymentPage() {
       const res = await fetch('/api/payments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...form,
-          applyCashEx: isCashReceived ? applyCashEx : false,
-          manualCashExAmount: customCashExAmount || undefined,
-        }),
+        body: JSON.stringify(form),
       });
       const data = await res.json().catch(() => ({}));
       setSaving(false);
@@ -167,61 +145,6 @@ export default function NewPaymentPage() {
               </div>
             </div>
 
-            {/* Cash EX Preview & Manual Control */}
-            {isCashReceived && form.amount && (
-              <div style={{ background: '#e8f4ff', border: '2px solid #000080', padding: '8px 10px', marginTop: 8 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 'bold', fontSize: 11, color: '#000080', cursor: 'pointer' }}>
-                    <input
-                      type='checkbox'
-                      checked={applyCashEx}
-                      onChange={e => setApplyCashEx(e.target.checked)}
-                    />
-                    <span>💸 Apply Cash EX Expense for this Party</span>
-                  </label>
-                  <span style={{ fontSize: 10, color: '#666' }}>
-                    {applyCashEx ? '✅ Enabled' : '⏸️ Skipped'}
-                  </span>
-                </div>
-
-                {applyCashEx && (
-                  <>
-                    <div style={{ display: 'flex', gap: 16, alignItems: 'center', fontSize: 11 }}>
-                      <div>
-                        <div style={{ color: '#808080' }}>Cash Received:</div>
-                        <div style={{ fontWeight: 'bold' }}>{fmt(form.amount)}</div>
-                      </div>
-                      <div style={{ color: '#808080' }}>→</div>
-                      <div>
-                        <div style={{ color: '#808080' }}>Calculated Cash EX:</div>
-                        <div style={{ fontWeight: 'bold', color: '#800000' }}>{fmt(cashExAmount!)}</div>
-                      </div>
-                      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <label style={{ fontSize: 11, fontWeight: '600' }}>Custom Amount (₹):</label>
-                        <input
-                          className='win95-input'
-                          type='number'
-                          step='0.01'
-                          style={{ width: 110 }}
-                          value={customCashExAmount}
-                          onChange={e => setCustomCashExAmount(e.target.value)}
-                          placeholder={cashExAmount ?? ''}
-                        />
-                      </div>
-                    </div>
-                    <div style={{ fontSize: 10, color: '#808080', marginTop: 6 }}>
-                      Formula: {fmt(form.amount)} × {cashExRate} ÷ {fmt(cashExBasis)} = {fmt(cashExAmount!)}
-                      <br />
-                      ✅ Party ledger will show FULL {fmt(form.amount)} received.
-                      <br />
-                      ✅ Cash EX will be recorded separately in business expense ledger.
-                      <br />
-                      ❌ Cash EX will NOT be deducted from the party&apos;s payment.
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
           </div>
 
           <div className='group-box'>

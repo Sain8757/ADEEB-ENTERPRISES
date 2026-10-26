@@ -329,6 +329,7 @@ export default function PaymentsPage() {
                         <option value='CASH'>CASH</option>
                         <option value='AC'>A/C (Bank / RTGS / NEFT)</option>
                         <option value='ADVANCE_JAMA'>ADVANCE JAMA</option>
+                        <option value='CASH_EX'>CASH EX</option>
                         <option value='CHEQUE'>CHEQUE</option>
                       </select>
                     </div>

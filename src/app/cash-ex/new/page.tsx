@@ -38,9 +38,8 @@ function NewCashExContent() {
   const [parties, setParties] = useState<any[]>([]);
   const [partyId, setPartyId] = useState(prePartyId);
   const [date, setDate] = useState(toIsoDate(new Date()));
-  const [cashAmount, setCashAmount] = useState('');
-  const [customExpenseAmount, setCustomExpenseAmount] = useState('');
-  const [overrideReason, setOverrideReason] = useState('');
+  const [amount, setAmount] = useState('');
+  const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -57,15 +56,14 @@ function NewCashExContent() {
       .catch(() => {});
   }, []);
 
-  const autoExpense = (parseFloat(cashAmount || '0') * 200) / 100000;
-  const finalExpense = customExpenseAmount && parseFloat(customExpenseAmount) > 0
-    ? parseFloat(customExpenseAmount)
-    : autoExpense;
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!cashAmount || parseFloat(cashAmount) <= 0) {
-      setError('Please enter a valid cash amount.');
+    if (!partyId) {
+      setError('Please select a party.');
+      return;
+    }
+    if (!amount || parseFloat(amount) <= 0) {
+      setError('Please enter a valid payment amount.');
       return;
     }
 
@@ -74,29 +72,26 @@ function NewCashExContent() {
     setSuccess('');
 
     try {
-      const res = await fetch('/api/cash-ex', {
+      const res = await fetch('/api/payments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          partyId: partyId || undefined,
+          partyId,
           date,
-          cashAmount,
-          expenseAmount: String(finalExpense),
-          overrideReason: overrideReason || undefined,
+          direction: 'RECEIVED',
+          method: 'CASH_EX',
+          amount,
+          notes: notes || undefined,
         }),
       });
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || 'Failed to record Cash EX expense');
+        throw new Error(data.error || 'Failed to record Cash EX');
       }
 
-      setSuccess(`Cash EX expense of ${fmt(finalExpense)} recorded successfully!`);
-      if (partyId) {
-        setTimeout(() => router.push(`/ledger/${partyId}?tab=cashex`), 1000);
-      } else {
-        setTimeout(() => router.push('/cash-ex'), 1000);
-      }
+      setSuccess(`Cash EX of ${fmt(amount)} recorded successfully!`);
+      setTimeout(() => router.push(`/ledger/${partyId}?tab=cashex`), 1000);
     } catch (err: any) {
       setError(err.message || 'Network error while saving Cash EX');
     } finally {
@@ -106,17 +101,16 @@ function NewCashExContent() {
 
   return (
     <AppShell userName={session?.user?.name ?? ''} userRole={role} currentPage='New Cash EX Entry'>
-      <div style={{ padding: 12, maxWidth: 580 }}>
+      <div style={{ padding: 12, maxWidth: 520 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-          <div className='section-heading' style={{ marginBottom: 0 }}>💸 New Cash EX Expense (Firm Expense)</div>
+          <div className='section-heading' style={{ marginBottom: 0 }}>💸 New Cash EX (Jama Entry)</div>
           <Link href={partyId ? `/ledger/${partyId}` : '/cash-ex'} className='win95-btn' style={{ textDecoration: 'none', fontSize: 11 }}>
             ⬅️ Cancel
           </Link>
         </div>
 
         <div className='alert-box info' style={{ marginBottom: 12, fontSize: 11 }}>
-          <strong>ℹ️ Cash EX Rule:</strong> ₹200 expense per ₹1,00,000 cash received.
-          Yeh firm ka apna alag kharch hai jo vyapar ledger mein judta hai aur invoice/statement mein dikhta hai.
+          <strong>ℹ️ Cash EX:</strong> Party ke khate mein Cash EX jama darj karein. Yeh invoice list mein Date ke sath &ldquo;Cash EX&rdquo; aur Payment amount ke roop mein dikhega.
         </div>
 
         {success && <div className='alert-box success' style={{ marginBottom: 10 }}>✅ {success}</div>}
@@ -152,47 +146,27 @@ function NewCashExContent() {
             </div>
           </div>
 
-          <div className='form-row'>
-            <div className='form-field' style={{ flex: 1 }}>
-              <label className='form-label'>Cash Received Amount (₹) *</label>
-              <input
-                className='win95-input'
-                type='number'
-                step='0.01'
-                value={cashAmount}
-                onChange={e => setCashAmount(e.target.value)}
-                placeholder='e.g. 100000'
-                required
-              />
-            </div>
-            <div className='form-field' style={{ flex: 1 }}>
-              <label className='form-label'>Custom Expense Amount (₹)</label>
-              <input
-                className='win95-input'
-                type='number'
-                step='0.01'
-                value={customExpenseAmount}
-                onChange={e => setCustomExpenseAmount(e.target.value)}
-                placeholder={`Auto: ${fmt(autoExpense)}`}
-              />
-            </div>
-          </div>
-
-          <div style={{ background: '#f8fafc', padding: 10, border: '1px solid #cbd5e1', borderRadius: 4, margin: '8px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <span style={{ fontSize: 12, fontWeight: 'bold' }}>Calculated Cash EX:</span>
-              <div style={{ fontSize: 10, color: '#64748b' }}>Rate: ₹200 per ₹1,00,000 basis</div>
-            </div>
-            <span style={{ fontSize: 18, fontWeight: 'bold', color: '#800000' }}>{fmt(finalExpense)}</span>
-          </div>
-
-          <div className='form-field' style={{ marginBottom: 12 }}>
-            <label className='form-label'>Override Reason / Note (Optional)</label>
+          <div className='form-field' style={{ marginTop: 8 }}>
+            <label className='form-label'>Payment Amount (₹) *</label>
             <input
               className='win95-input'
-              value={overrideReason}
-              onChange={e => setOverrideReason(e.target.value)}
-              placeholder='e.g. Mandi cash expense / negotiated rate'
+              type='number'
+              step='0.01'
+              min='0.01'
+              value={amount}
+              onChange={e => setAmount(e.target.value)}
+              placeholder='e.g. 1500'
+              required
+            />
+          </div>
+
+          <div className='form-field' style={{ marginTop: 8, marginBottom: 12 }}>
+            <label className='form-label'>Notes / Reference (Optional)</label>
+            <input
+              className='win95-input'
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              placeholder='e.g. Mandi cash ex'
             />
           </div>
 

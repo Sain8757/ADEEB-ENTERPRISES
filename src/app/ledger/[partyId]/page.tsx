@@ -87,9 +87,8 @@ function PartyLedgerHubContent() {
   const [editingExpense, setEditingExpense] = useState<any | null>(null);
   const [expenseForm, setExpenseForm] = useState({
     date: toIsoDate(new Date()),
-    cashAmount: '',
-    expenseAmount: '',
-    overrideReason: '',
+    amount: '',
+    notes: '',
   });
   const [savingExpense, setSavingExpense] = useState(false);
   const [deletingExpense, setDeletingExpense] = useState<any | null>(null);
@@ -169,6 +168,34 @@ function PartyLedgerHubContent() {
   const purchases: any[] = data?.purchases ?? [];
   const payments: any[] = data?.payments ?? [];
   const cashExExpenses: any[] = data?.cashExExpenses ?? [];
+
+  // Combined Cash EX entries (from Payments with method CASH_EX + legacy expenses)
+  const allCashExList = useMemo(() => {
+    const list: any[] = [];
+    for (const p of payments) {
+      if (p.method === 'CASH_EX') {
+        list.push({
+          id: p.id,
+          date: p.date,
+          amount: p.amount,
+          notes: p.notes || p.refNo || '—',
+          source: 'PAYMENT',
+          original: p,
+        });
+      }
+    }
+    for (const e of cashExExpenses) {
+      list.push({
+        id: e.id,
+        date: e.date,
+        amount: e.expenseAmount || e.cashAmount,
+        notes: e.overrideReason || '—',
+        source: 'EXPENSE',
+        original: e,
+      });
+    }
+    return list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [payments, cashExExpenses]);
 
   // Default 10 entries for Ledger
   const displayedEntries = useMemo(() => {
@@ -360,20 +387,18 @@ function PartyLedgerHubContent() {
     setEditingExpense(null);
     setExpenseForm({
       date: toIsoDate(new Date()),
-      cashAmount: '',
-      expenseAmount: '',
-      overrideReason: '',
+      amount: '',
+      notes: '',
     });
     setExpenseModalOpen(true);
   }
 
-  function startEditExpense(e: any) {
-    setEditingExpense(e);
+  function startEditExpense(item: any) {
+    setEditingExpense(item);
     setExpenseForm({
-      date: toIsoDate(new Date(e.date)),
-      cashAmount: String(e.cashAmount),
-      expenseAmount: String(e.expenseAmount),
-      overrideReason: e.overrideReason || '',
+      date: toIsoDate(new Date(item.date)),
+      amount: String(item.amount),
+      notes: item.notes === '—' ? '' : (item.notes || ''),
     });
     setExpenseModalOpen(true);
   }
@@ -383,21 +408,37 @@ function PartyLedgerHubContent() {
     setSavingExpense(true);
     setError(''); setSuccess('');
     try {
-      const url = editingExpense ? `/api/cash-ex/${editingExpense.id}` : `/api/cash-ex`;
+      const isPayment = !editingExpense || editingExpense.source === 'PAYMENT';
+      const url = editingExpense
+        ? (isPayment ? `/api/payments/${editingExpense.id}` : `/api/cash-ex/${editingExpense.id}`)
+        : `/api/payments`;
       const method = editingExpense ? 'PATCH' : 'POST';
+
+      const body = isPayment
+        ? {
+            partyId,
+            date: expenseForm.date,
+            amount: expenseForm.amount,
+            direction: 'RECEIVED',
+            method: 'CASH_EX',
+            notes: expenseForm.notes || undefined,
+          }
+        : {
+            partyId,
+            date: expenseForm.date,
+            cashAmount: expenseForm.amount,
+            expenseAmount: expenseForm.amount,
+            overrideReason: expenseForm.notes || undefined,
+          };
+
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          partyId,
-          date: expenseForm.date,
-          cashAmount: expenseForm.cashAmount,
-          expenseAmount: expenseForm.expenseAmount,
-          overrideReason: expenseForm.overrideReason || undefined,
-        }),
+        body: JSON.stringify(body),
       });
-      if (!res.ok) throw new Error('Failed to save Cash EX');
-      setSuccess(editingExpense ? 'Cash EX expense updated.' : 'Cash EX expense added for this party.');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to save Cash EX');
+      setSuccess(editingExpense ? 'Cash EX updated successfully.' : 'New Cash EX recorded successfully.');
       setExpenseModalOpen(false);
       setEditingExpense(null);
       load();
@@ -413,9 +454,11 @@ function PartyLedgerHubContent() {
     setDeletingExpenseState(true);
     setError(''); setSuccess('');
     try {
-      const res = await fetch(`/api/cash-ex/${deletingExpense.id}`, { method: 'DELETE' });
+      const isPayment = deletingExpense.source === 'PAYMENT';
+      const url = isPayment ? `/api/payments/${deletingExpense.id}` : `/api/cash-ex/${deletingExpense.id}`;
+      const res = await fetch(url, { method: 'DELETE' });
       if (!res.ok) throw new Error('Failed to delete Cash EX');
-      setSuccess('Cash EX expense deleted.');
+      setSuccess('Cash EX entry deleted.');
       setDeletingExpense(null);
       load();
     } catch (err: any) {
@@ -594,7 +637,7 @@ function PartyLedgerHubContent() {
                 style={{ padding: '4px 12px', fontWeight: 'bold', borderBottom: 'none' }}
                 onClick={() => setActiveTab('cashex')}
               >
-                💸 Cash EX ({cashExExpenses.length})
+                💸 Cash EX ({allCashExList.length})
               </button>
               <button
                 className={`win95-btn ${activeTab === 'profile' ? 'win95-btn-primary' : ''}`}
@@ -905,8 +948,7 @@ function PartyLedgerHubContent() {
                 </div>
 
                 <div className='alert-box info' style={{ marginBottom: 8 }}>
-                  <strong>Cash EX Rule:</strong> Cash EX is a SEPARATE firm business expense (₹200 per ₹1,00,000 cash received).
-                  It is recorded here for firm accounting and does NOT reduce the party balance.
+                  <strong>💸 Cash EX:</strong> Manual Cash EX jama entries for this party. These appear in the invoice list with Date, &ldquo;Cash EX&rdquo;, and Payment amount.
                 </div>
 
                 <div className='table-container'>
@@ -914,35 +956,27 @@ function PartyLedgerHubContent() {
                     <thead>
                       <tr>
                         <th>Date</th>
-                        <th className='num'>Cash Received (₹)</th>
-                        <th>Rate Applied</th>
-                        <th>Basis Applied</th>
-                        <th className='num'>Expense Amount (₹)</th>
-                        <th>Formula / Note</th>
+                        <th className='num'>Payment Amount (₹)</th>
+                        <th>Notes / Reference</th>
                         {role !== 'VIEWER' && <th>Actions</th>}
                       </tr>
                     </thead>
                     <tbody>
-                      {cashExExpenses.length === 0 && (
-                        <tr><td colSpan={7} style={{ textAlign: 'center', padding: 12, color: '#808080' }}>No Cash EX expenses recorded for this party.</td></tr>
+                      {allCashExList.length === 0 && (
+                        <tr><td colSpan={4} style={{ textAlign: 'center', padding: 12, color: '#808080' }}>No Cash EX entries recorded for this party.</td></tr>
                       )}
-                      {cashExExpenses.map(e => (
-                        <tr key={e.id}>
-                          <td>{new Date(e.date).toLocaleDateString('en-IN')}</td>
-                          <td className='amount'>{fmt(e.cashAmount)}</td>
-                          <td>{e.rateApplied}</td>
-                          <td>{fmt(e.basisApplied)}</td>
-                          <td className='amount' style={{ color: '#800000', fontWeight: 'bold' }}>{fmt(e.expenseAmount)}</td>
-                          <td style={{ fontSize: 10 }}>
-                            {e.overrideReason ? `Override: ${e.overrideReason}` : `${fmt(e.cashAmount)} × ${e.rateApplied} ÷ ${fmt(e.basisApplied)}`}
-                          </td>
+                      {allCashExList.map(item => (
+                        <tr key={item.id}>
+                          <td>{new Date(item.date).toLocaleDateString('en-IN')}</td>
+                          <td className='amount' style={{ color: '#15803d', fontWeight: 'bold' }}>{fmt(item.amount)}</td>
+                          <td style={{ fontSize: 11 }}>{item.notes || '—'}</td>
                           {role !== 'VIEWER' && (
                             <td>
                               <div style={{ display: 'flex', gap: 4 }}>
-                                <button className='win95-btn' style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => startEditExpense(e)}>
+                                <button className='win95-btn' style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => startEditExpense(item)}>
                                   ✏️ Edit
                                 </button>
-                                <button className='win95-btn win95-btn-danger' style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => setDeletingExpense(e)}>
+                                <button className='win95-btn win95-btn-danger' style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => setDeletingExpense(item)}>
                                   🗑️ Delete
                                 </button>
                               </div>
@@ -951,14 +985,12 @@ function PartyLedgerHubContent() {
                         </tr>
                       ))}
                     </tbody>
-                    {cashExExpenses.length > 0 && (
+                    {allCashExList.length > 0 && (
                       <tfoot>
                         <tr>
-                          <td><strong>TOTAL EXPENSE</strong></td>
-                          <td className='amount'><strong>{fmt(cashExExpenses.reduce((s, e) => s + parseFloat(e.cashAmount || 0), 0))}</strong></td>
-                          <td colSpan={2}></td>
-                          <td className='amount' style={{ color: '#800000' }}>
-                            <strong>{fmt(cashExExpenses.reduce((s, e) => s + parseFloat(e.expenseAmount || 0), 0))}</strong>
+                          <td><strong>TOTAL CASH EX</strong></td>
+                          <td className='amount' style={{ color: '#15803d' }}>
+                            <strong>{fmt(allCashExList.reduce((s, e) => s + parseFloat(e.amount || 0), 0))}</strong>
                           </td>
                           <td colSpan={role !== 'VIEWER' ? 2 : 1}></td>
                         </tr>
@@ -1234,6 +1266,7 @@ function PartyLedgerHubContent() {
                             <option value='CASH'>CASH</option>
                             <option value='AC'>A/C (Bank / RTGS / NEFT)</option>
                             <option value='ADVANCE_JAMA'>ADVANCE JAMA</option>
+                            <option value='CASH_EX'>CASH EX</option>
                             <option value='CHEQUE'>CHEQUE</option>
                           </select>
                         </div>
@@ -1323,7 +1356,7 @@ function PartyLedgerHubContent() {
             {/* ── CASH EX MODAL (Add / Edit) ── */}
             {expenseModalOpen && (
               <div className='modal-overlay'>
-                <div className='modal-window' style={{ width: 420 }}>
+                <div className='modal-window' style={{ width: 380 }}>
                   <div className='title-bar'>
                     <span className='title-bar-text'>
                       {editingExpense ? '✏️ Edit Cash EX' : '💸 + New Cash EX'} — {party.name}
@@ -1331,55 +1364,35 @@ function PartyLedgerHubContent() {
                     <button style={{ background: '#c0c0c0', border: '1px solid #808080', cursor: 'pointer', fontSize: 10 }} onClick={() => setExpenseModalOpen(false)}>✕</button>
                   </div>
                   <form onSubmit={handleSaveExpense}>
-                    <div className='modal-body' style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      <div className='form-row'>
-                        <div className='form-field' style={{ flex: 1 }}>
-                          <label className='form-label'>Date *</label>
-                          <input
-                            className='win95-input' type='date'
-                            value={expenseForm.date}
-                            onChange={e => setExpenseForm(f => ({ ...f, date: e.target.value }))}
-                            required
-                          />
-                        </div>
-                        <div className='form-field' style={{ flex: 1 }}>
-                          <label className='form-label'>Cash Received (₹) *</label>
-                          <input
-                            className='win95-input' type='number' step='0.01'
-                            value={expenseForm.cashAmount}
-                            onChange={e => {
-                              const val = e.target.value;
-                              const auto = (parseFloat(val || '0') * 200) / 100000;
-                              setExpenseForm(f => ({
-                                ...f,
-                                cashAmount: val,
-                                expenseAmount: f.expenseAmount && f.expenseAmount !== '0' ? f.expenseAmount : String(auto),
-                              }));
-                            }}
-                            placeholder='e.g. 100000'
-                            required
-                          />
-                        </div>
-                      </div>
-
+                    <div className='modal-body' style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
                       <div className='form-field'>
-                        <label className='form-label'>Expense Amount (₹) * (Auto: ₹200 / Lakh)</label>
+                        <label className='form-label'>Date *</label>
                         <input
-                          className='win95-input' type='number' step='0.01'
-                          value={expenseForm.expenseAmount}
-                          onChange={e => setExpenseForm(f => ({ ...f, expenseAmount: e.target.value }))}
-                          placeholder='e.g. 200'
+                          className='win95-input' type='date'
+                          value={expenseForm.date}
+                          onChange={e => setExpenseForm(f => ({ ...f, date: e.target.value }))}
                           required
                         />
                       </div>
 
                       <div className='form-field'>
-                        <label className='form-label'>Override Reason / Note (Optional)</label>
+                        <label className='form-label'>Payment Amount (₹) *</label>
+                        <input
+                          className='win95-input' type='number' step='0.01' min='0.01'
+                          value={expenseForm.amount}
+                          onChange={e => setExpenseForm(f => ({ ...f, amount: e.target.value }))}
+                          placeholder='e.g. 1500'
+                          required
+                        />
+                      </div>
+
+                      <div className='form-field'>
+                        <label className='form-label'>Notes / Reference (Optional)</label>
                         <input
                           className='win95-input'
-                          value={expenseForm.overrideReason}
-                          onChange={e => setExpenseForm(f => ({ ...f, overrideReason: e.target.value }))}
-                          placeholder='e.g. Mandi cash expense'
+                          value={expenseForm.notes}
+                          onChange={e => setExpenseForm(f => ({ ...f, notes: e.target.value }))}
+                          placeholder='e.g. Mandi cash ex'
                         />
                       </div>
                     </div>
