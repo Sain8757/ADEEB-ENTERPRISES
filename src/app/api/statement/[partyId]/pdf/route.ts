@@ -231,12 +231,18 @@ function fmtNum(v: Decimal | string | number, decimals = 0): string {
   if (isNaN(n)) return '0';
   const absStr = Math.abs(n).toFixed(decimals);
   const [i, d] = absStr.split('.');
-  const groups: string[] = [];
-  let rest = i;
-  if (rest.length > 3) { groups.unshift(rest.slice(-3)); rest = rest.slice(0, -3); }
-  while (rest.length > 2) { groups.unshift(rest.slice(-2)); rest = rest.slice(0, -2); }
-  if (rest) groups.unshift(rest);
-  const formatted = groups.join(',');
+  if (i.length <= 3) {
+    return decimals > 0 && d ? `${i}.${d}` : i;
+  }
+  const last3 = i.slice(-3);
+  let other = i.slice(0, -3);
+  const pairs: string[] = [];
+  while (other.length > 2) {
+    pairs.unshift(other.slice(-2));
+    other = other.slice(0, -2);
+  }
+  if (other) pairs.unshift(other);
+  const formatted = `${pairs.join(',')},${last3}`;
   return decimals > 0 && d ? `${formatted}.${d}` : formatted;
 }
 
@@ -713,6 +719,7 @@ table.statement-table tfoot td:last-child {
   align-items: baseline;
   gap: 12px;
   margin-bottom: 6px;
+  flex-wrap: wrap;
 }
 .formula-label {
   font-size: 10px;

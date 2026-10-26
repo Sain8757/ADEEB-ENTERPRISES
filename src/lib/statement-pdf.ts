@@ -31,12 +31,18 @@ function fmtNum(v: Decimal | string | number | null | undefined, decimals = 0): 
   if (isNaN(n)) return '0';
   const absStr = Math.abs(n).toFixed(decimals);
   const [i, d] = absStr.split('.');
-  const groups: string[] = [];
-  let rest = i;
-  if (rest.length > 3) { groups.unshift(rest.slice(-3)); rest = rest.slice(0, -3); }
-  while (rest.length > 2) { groups.unshift(rest.slice(-2)); rest = rest.slice(0, -2); }
-  if (rest) groups.unshift(rest);
-  const formatted = groups.join(',');
+  if (i.length <= 3) {
+    return decimals > 0 && d ? `${i}.${d}` : i;
+  }
+  const last3 = i.slice(-3);
+  let other = i.slice(0, -3);
+  const pairs: string[] = [];
+  while (other.length > 2) {
+    pairs.unshift(other.slice(-2));
+    other = other.slice(0, -2);
+  }
+  if (other) pairs.unshift(other);
+  const formatted = `${pairs.join(',')},${last3}`;
   return decimals > 0 && d ? `${formatted}.${d}` : formatted;
 }
 
@@ -380,23 +386,28 @@ export async function generateStatementPdfBuffer(data: StatementData): Promise<B
   const paymentsFormulaStr = fmtNum(totalPayments, 2);
   const closingResultStr = fmtBalFullDecimal(closingSigned);
 
-  // 1. FORMULA ROW
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.5);
-  doc.setTextColor(71, 85, 105);
-  const formulaLabel = 'OPENING + AMOUNT - PAYMENT';
-  doc.text(formulaLabel, pageWidth - margin - 85, summaryY, { align: 'right' });
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
-  doc.setTextColor(51, 65, 85);
-  const formulaMath = `${openingFormulaStr} + ${purchasesFormulaStr} - ${paymentsFormulaStr} =`;
-  doc.text(formulaMath, pageWidth - margin - 35, summaryY, { align: 'right' });
-
+  // 1. FORMULA ROW (Calculated dynamically from right to left so text never overlaps)
+  const fullClosingStr = closingResultStr;
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
+  const closingWidth = doc.getTextWidth(fullClosingStr);
   doc.setTextColor(0, 0, 0);
-  doc.text(closingResultStr, pageWidth - margin, summaryY, { align: 'right' });
+  doc.text(fullClosingStr, pageWidth - margin, summaryY, { align: 'right' });
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  const formulaMath = `${openingFormulaStr} + ${purchasesFormulaStr} - ${paymentsFormulaStr} =`;
+  const mathWidth = doc.getTextWidth(formulaMath);
+  const mathX = pageWidth - margin - closingWidth - 3;
+  doc.setTextColor(51, 65, 85);
+  doc.text(formulaMath, mathX, summaryY, { align: 'right' });
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  const formulaLabel = 'OPENING + AMOUNT - PAYMENT';
+  const labelX = mathX - mathWidth - 3.5;
+  doc.setTextColor(71, 85, 105);
+  doc.text(formulaLabel, labelX, summaryY, { align: 'right' });
 
   summaryY += 5;
 
