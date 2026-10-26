@@ -989,6 +989,24 @@ html, body {
   .status-bar {
     display: none;
   }
+
+  .hide-on-mobile {
+    display: none !important;
+  }
+}
+
+.show-on-mobile-only {
+  display: none !important;
+}
+
+@media (max-width: 640px) {
+  .show-on-mobile-only {
+    display: block !important;
+  }
+  td.show-on-mobile-only,
+  th.show-on-mobile-only {
+    display: table-cell !important;
+  }
 }
 
 /* ═══════════════════════════════════════════════════════

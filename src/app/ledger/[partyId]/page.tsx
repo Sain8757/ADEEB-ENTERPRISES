@@ -355,6 +355,28 @@ function PartyLedgerHubContent() {
     setPaymentModalOpen(true);
   }
 
+  function handleEditEntry(e: any) {
+    if (e.purchase || e.purchaseId || e.txType === 'PURCHASE') {
+      const p = e.purchase ||
+        purchases.find((x: any) => x.id === e.purchaseId || x.id === e.sourceTxId) ||
+        purchases.find((x: any) => new Date(x.date).toDateString() === new Date(e.date).toDateString() && String(x.amount) === String(e.debit));
+      if (p) {
+        startEditPurchase(p);
+      } else {
+        setActiveTab('purchases');
+      }
+    } else if (e.payment || e.paymentId || e.txType?.includes('PAYMENT')) {
+      const pm = e.payment ||
+        payments.find((x: any) => x.id === e.paymentId || x.id === e.sourceTxId) ||
+        payments.find((x: any) => new Date(x.date).toDateString() === new Date(e.date).toDateString() && String(x.amount) === String(e.credit));
+      if (pm) {
+        startEditPayment(pm);
+      } else {
+        setActiveTab('payments');
+      }
+    }
+  }
+
   async function handleSavePayment(e: React.FormEvent) {
     e.preventDefault();
     setSavingPayment(true);
@@ -604,26 +626,26 @@ function PartyLedgerHubContent() {
             {success && <div className='alert-box success' style={{ marginBottom: 8 }}>✅ {success}</div>}
             {error && <div className='alert-box error' style={{ marginBottom: 8 }}>⚠️ {error}</div>}
 
-            {/* ── TOP STAT TILES ── */}
-            <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-              <div className='stat-tile'>
+            {/* ── TOP STAT TILES (Responsive & clean on mobile) ── */}
+            <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+              <div className='stat-tile' style={{ flex: '1 1 110px' }}>
                 <div className='stat-tile-label'>Total Entries</div>
                 <div className='stat-tile-value'>{allEntries.length}</div>
                 <div style={{ fontSize: 10, color: '#808080' }}>
-                  {!showAllEntries && allEntries.length > 10 ? `Showing last 10 entries` : `Showing all entries`}
+                  {!showAllEntries && allEntries.length > 10 ? `Showing last 10` : `Showing all`}
                 </div>
               </div>
-              <div className='stat-tile'>
+              <div className='stat-tile' style={{ flex: '1 1 150px' }}>
                 <div className='stat-tile-label'>Period Kharid (Debits)</div>
                 <div className='stat-tile-value' style={{ color: '#800000' }}>{fmt(totalPeriodDebits)}</div>
                 <div style={{ fontSize: 10, color: '#808080' }}>{purchases.length} buffalo loads</div>
               </div>
-              <div className='stat-tile'>
+              <div className='stat-tile' style={{ flex: '1 1 150px' }}>
                 <div className='stat-tile-label'>Period Jama (Credits)</div>
                 <div className='stat-tile-value' style={{ color: '#008000' }}>{fmt(totalPeriodCredits)}</div>
                 <div style={{ fontSize: 10, color: '#808080' }}>{payments.length} payment entries</div>
               </div>
-              <div className='stat-tile' style={{ border: '2px solid #000080', background: '#f8fafc' }}>
+              <div className='stat-tile' style={{ flex: '2 1 200px', border: '2px solid #000080', background: '#f8fafc' }}>
                 <div className='stat-tile-label' style={{ color: '#000080', fontWeight: 'bold' }}>Current Balance Due</div>
                 <div className='stat-tile-value' style={{ fontSize: 18, color: balDir === 'DR' ? '#800000' : balDir === 'CR' ? '#008000' : '#000' }}>
                   {fmt(Math.abs(lastBal))} {balDir}
@@ -634,12 +656,13 @@ function PartyLedgerHubContent() {
               </div>
             </div>
 
-            {/* ── SECTION DROPDOWN SELECTOR (Dropdown for all party sections) ── */}
-            <div className='group-box' style={{ marginBottom: 10, padding: '6px 10px', background: '#ece9d8' }}>
+            {/* ── UNIFIED CONTROL BAR (Section Selector + Date Filter in ONE clean row) ── */}
+            <div className='group-box' style={{ marginBottom: 10, padding: '7px 10px', background: '#ece9d8' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <label style={{ fontSize: 11, fontWeight: 'bold', color: '#0f172a' }}>
-                    📁 Section / Tab:
+                {/* Section Selector */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  <label style={{ fontSize: 11, fontWeight: 'bold', color: '#0f172a', whiteSpace: 'nowrap' }}>
+                    📁 Section:
                   </label>
                   <select
                     className='win95-select'
@@ -648,8 +671,8 @@ function PartyLedgerHubContent() {
                     style={{
                       fontSize: 12,
                       fontWeight: 'bold',
-                      padding: '4px 10px',
-                      minWidth: 240,
+                      padding: '4px 8px',
+                      minWidth: 200,
                       background: '#ffffff',
                       color: '#000080',
                       borderRadius: 3,
@@ -664,29 +687,12 @@ function PartyLedgerHubContent() {
                   </select>
                 </div>
 
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  <button className='win95-btn win95-btn-primary' style={{ fontSize: 11 }} onClick={openNewPurchaseModal}>
-                    ➕ New Kharid
-                  </button>
-                  <button className='win95-btn' style={{ fontSize: 11, background: '#15803d', color: '#fff' }} onClick={openNewPaymentModal}>
-                    ➕ New Jama
-                  </button>
-                  <button className='win95-btn' style={{ fontSize: 11, background: '#0284c7', color: '#fff' }} onClick={openNewCashExModal}>
-                    ➕ New Cash EX
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* ── TAB 1: PARTY LEDGER ── */}
-            {activeTab === 'ledger' && (
-              <div>
-                {/* ── DATE FILTER DROPDOWN ── */}
-                <div className='group-box' style={{ marginBottom: 10, padding: '6px 10px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <label style={{ fontSize: 11, fontWeight: 'bold', color: '#0f172a' }}>
-                        📅 Date Filter:
+                {/* Date Filter & Inputs (visible on Ledger tab) */}
+                {activeTab === 'ledger' && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <label style={{ fontSize: 11, fontWeight: 'bold', color: '#0f172a', whiteSpace: 'nowrap' }}>
+                        📅 Date:
                       </label>
                       <select
                         className='win95-select'
@@ -702,8 +708,8 @@ function PartyLedgerHubContent() {
                         style={{
                           fontSize: 12,
                           fontWeight: 'bold',
-                          padding: '4px 10px',
-                          minWidth: 210,
+                          padding: '4px 8px',
+                          minWidth: 170,
                           borderRadius: 3,
                           cursor: 'pointer',
                         }}
@@ -714,16 +720,16 @@ function PartyLedgerHubContent() {
                         <option value='1m'>📅 1 Mahina</option>
                         <option value='2m'>📅 2 Mahine</option>
                         <option value='6m'>📅 6 Mahine</option>
-                        <option value='custom'>🗓️ Custom Date (From - To)...</option>
+                        <option value='custom'>🗓️ Custom Dates...</option>
                       </select>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
                       <label className='form-label' style={{ fontSize: 11 }}>From:</label>
                       <input
                         className='win95-input'
                         type='date'
-                        style={{ width: 130, fontSize: 11 }}
+                        style={{ width: 125, fontSize: 11, padding: '3px 4px' }}
                         value={from}
                         onChange={e => { setFrom(e.target.value); setActivePreset('custom'); }}
                       />
@@ -731,24 +737,30 @@ function PartyLedgerHubContent() {
                       <input
                         className='win95-input'
                         type='date'
-                        style={{ width: 130, fontSize: 11 }}
+                        style={{ width: 125, fontSize: 11, padding: '3px 4px' }}
                         value={to}
                         onChange={e => { setTo(e.target.value); setActivePreset('custom'); }}
                       />
-                      <button className='toolbar-btn' onClick={load} style={{ padding: '3px 10px', fontWeight: 'bold' }}>⟳ Apply</button>
+                      <button className='toolbar-btn' onClick={load} style={{ padding: '3px 8px', fontWeight: 'bold', fontSize: 11 }}>⟳ Apply</button>
                       {(from || to) && (
                         <button
                           className='win95-btn'
                           style={{ fontSize: 10, padding: '2px 6px' }}
                           onClick={() => applyPreset('all')}
-                          title='Reset to all'
+                          title='Clear dates'
                         >
                           ✕ Clear
                         </button>
                       )}
                     </div>
                   </div>
-                </div>
+                )}
+              </div>
+            </div>
+
+            {/* ── TAB 1: PARTY LEDGER ── */}
+            {activeTab === 'ledger' && (
+              <div>
 
                 {/* Entries Count Toggle Bar */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
@@ -773,22 +785,24 @@ function PartyLedgerHubContent() {
                       <tr>
                         <th>Date</th>
                         <th>Type</th>
-                        <th>Reference</th>
+                        <th className='hide-on-mobile'>Reference</th>
                         <th>Description</th>
                         <th className='num'>Debit (Kharid ₹)</th>
                         <th className='num'>Credit (Jama ₹)</th>
                         <th className='num'>Running Balance (₹)</th>
+                        {role !== 'VIEWER' && <th style={{ width: 55, textAlign: 'center' }}>Edit</th>}
                       </tr>
                     </thead>
                     <tbody>
                       {displayedEntries.length === 0 && (
-                        <tr><td colSpan={7} style={{ textAlign: 'center', padding: 12, color: '#808080' }}>No ledger entries found.</td></tr>
+                        <tr><td colSpan={role !== 'VIEWER' ? 8 : 7} style={{ textAlign: 'center', padding: 12, color: '#808080' }}>No ledger entries found.</td></tr>
                       )}
                       {displayedEntries.map((e: any) => {
                         const bal = parseFloat(e.runningBalance);
+                        const canEdit = Boolean(e.purchase || e.purchaseId || e.payment || e.paymentId || e.txType === 'PURCHASE' || e.txType?.includes('PAYMENT'));
                         return (
                           <tr key={e.id}>
-                            <td>{new Date(e.date).toLocaleDateString('en-IN')}</td>
+                            <td style={{ whiteSpace: 'nowrap' }}>{new Date(e.date).toLocaleDateString('en-IN')}</td>
                             <td style={{ fontSize: 10, whiteSpace: 'nowrap' }}>
                               <span style={{
                                 padding: '1px 5px', borderRadius: 3, fontSize: 9, fontWeight: 'bold',
@@ -798,8 +812,15 @@ function PartyLedgerHubContent() {
                                 {e.txType === 'PURCHASE' ? 'KHARID' : e.txType === 'PAYMENT_RECEIVED' ? 'JAMA' : e.txType}
                               </span>
                             </td>
-                            <td>{e.refNo || '—'}</td>
-                            <td style={{ maxWidth: 260 }}>{e.description}</td>
+                            <td className='hide-on-mobile'>{e.refNo || '—'}</td>
+                            <td style={{ maxWidth: 260 }}>
+                              <div>{e.description}</div>
+                              {e.refNo && (
+                                <div className='show-on-mobile-only' style={{ fontSize: 10, color: '#64748b' }}>
+                                  Ref: {e.refNo}
+                                </div>
+                              )}
+                            </td>
                             <td className='amount' style={{ color: '#800000', fontWeight: 'bold' }}>
                               {parseFloat(e.debit) > 0 ? fmt(e.debit) : ''}
                             </td>
@@ -809,6 +830,22 @@ function PartyLedgerHubContent() {
                             <td className={`amount ${bal > 0 ? 'ledger-balance-dr' : bal < 0 ? 'ledger-balance-cr' : ''}`}>
                               {fmt(Math.abs(bal))} {bal > 0 ? 'DR' : bal < 0 ? 'CR' : ''}
                             </td>
+                            {role !== 'VIEWER' && (
+                              <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+                                {canEdit ? (
+                                  <button
+                                    className='win95-btn'
+                                    style={{ fontSize: 10, padding: '1px 6px' }}
+                                    onClick={() => handleEditEntry(e)}
+                                    title='Edit this entry'
+                                  >
+                                    ✏️
+                                  </button>
+                                ) : (
+                                  <span style={{ color: '#94a3b8', fontSize: 10 }}>—</span>
+                                )}
+                              </td>
+                            )}
                           </tr>
                         );
                       })}
@@ -816,12 +853,14 @@ function PartyLedgerHubContent() {
                     {allEntries.length > 0 && (
                       <tfoot>
                         <tr>
-                          <td colSpan={4} style={{ textAlign: 'right' }}><strong>PERIOD TOTAL / CLOSING:</strong></td>
+                          <td className='hide-on-mobile' colSpan={4} style={{ textAlign: 'right' }}><strong>PERIOD TOTAL / CLOSING:</strong></td>
+                          <td className='show-on-mobile-only' colSpan={3} style={{ textAlign: 'right' }}><strong>TOTAL:</strong></td>
                           <td className='amount' style={{ color: '#800000' }}><strong>{fmt(totalPeriodDebits)}</strong></td>
                           <td className='amount' style={{ color: '#008000' }}><strong>{fmt(totalPeriodCredits)}</strong></td>
                           <td className={`amount ${lastBal > 0 ? 'ledger-balance-dr' : lastBal < 0 ? 'ledger-balance-cr' : ''}`}>
                             <strong>{fmt(Math.abs(lastBal))} {balDir}</strong>
                           </td>
+                          {role !== 'VIEWER' && <td></td>}
                         </tr>
                       </tfoot>
                     )}
