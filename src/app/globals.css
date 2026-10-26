@@ -544,14 +544,51 @@ html, body {
   background: var(--win95-bg-light);
 }
 
+/* Hover: soft clear highlight so party names, links, red/green balances & badges stay 100% visible */
 .win95-table tr:hover td {
-  background: var(--win95-highlight);
-  color: var(--win95-highlight-text);
+  background: #e8f0fe !important;
+  color: #000000 !important;
 }
 
+.win95-table tr:hover a,
+.win95-table tr:hover .party-name-link {
+  color: #000080 !important;
+  text-decoration: underline !important;
+}
+
+.win95-table tr:hover td.amount {
+  color: inherit;
+}
+
+.win95-table tr:hover .ledger-balance-dr {
+  color: #b91c1c !important;
+}
+
+.win95-table tr:hover .ledger-balance-cr {
+  color: #15803d !important;
+}
+
+/* Selected row */
 .win95-table tr.selected td {
-  background: var(--win95-highlight);
-  color: var(--win95-highlight-text);
+  background: var(--win95-highlight) !important;
+  color: var(--win95-highlight-text) !important;
+}
+
+.win95-table tr.selected a,
+.win95-table tr.selected .party-name-link {
+  color: #ffff00 !important;
+  text-decoration: underline !important;
+}
+
+.party-name-link {
+  color: #000080;
+  font-weight: bold;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.party-name-link:hover {
+  color: #0000cc;
 }
 
 .win95-table td.num,

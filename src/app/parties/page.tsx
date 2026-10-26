@@ -130,7 +130,7 @@ export default function PartiesPage() {
                 <tr key={p.id}>
                   <td style={{ color: '#808080' }}>{p.code || '—'}</td>
                   <td>
-                    <Link href={`/ledger/${p.id}`} style={{ color: '#000080', fontWeight: 'bold', textDecoration: 'underline' }}>
+                    <Link href={`/ledger/${p.id}`} className='party-name-link'>
                       {p.name}
                     </Link>
                   </td>

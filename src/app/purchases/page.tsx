@@ -207,7 +207,7 @@ export default function PurchasesPage() {
                 <tr key={p.id}>
                   <td>{new Date(p.date).toLocaleDateString('en-IN')}</td>
                   <td>
-                    <Link href={`/ledger/${p.partyId}`} style={{ color: '#000080', fontWeight: 'bold', textDecoration: 'underline' }}>
+                    <Link href={`/ledger/${p.partyId}`} className='party-name-link'>
                       {p.party?.name ?? '—'}
                     </Link>
                   </td>

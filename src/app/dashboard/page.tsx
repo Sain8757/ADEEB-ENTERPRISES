@@ -95,7 +95,7 @@ export default function DashboardPage() {
                           <td>{new Date(e.date).toLocaleDateString('en-IN')}</td>
                           <td>
                             {e.partyId ? (
-                              <a href={`/ledger/${e.partyId}`} style={{ color: '#000080', fontWeight: 'bold', textDecoration: 'underline' }}>
+                              <a href={`/ledger/${e.partyId}`} className='party-name-link'>
                                 {e.party?.name ?? '—'}
                               </a>
                             ) : (

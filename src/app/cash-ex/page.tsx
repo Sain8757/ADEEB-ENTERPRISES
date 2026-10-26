@@ -164,7 +164,7 @@ export default function CashExPage() {
                 <tr key={e.id}>
                   <td>{new Date(e.date).toLocaleDateString('en-IN')}</td>
                   <td>
-                    <Link href={`/ledger/${e.payment?.partyId}`} style={{ color: '#000080', fontWeight: 'bold', textDecoration: 'underline' }}>
+                    <Link href={`/ledger/${e.payment?.partyId}`} className='party-name-link'>
                       {e.payment?.party?.name ?? '—'}
                     </Link>
                   </td>
