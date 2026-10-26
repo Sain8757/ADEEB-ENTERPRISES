@@ -43,8 +43,9 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const session = await auth();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const role = (session.user as any).role;
+  if (!session || !session.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const user = session.user;
+  const role = (user as any).role;
   if (role === 'VIEWER') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const body = await req.json();
@@ -69,7 +70,7 @@ export async function POST(req: NextRequest) {
     amount: data.amount,
     notes: data.notes,
     bankRef: data.bankRef,
-    userId: session.user.id,
+    userId: user.id,
     cashExRateConfig,
   });
 

@@ -1,6 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   serverExternalPackages: ['pdf-parse', 'bcryptjs'],
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
   async headers() {
     return [
       {

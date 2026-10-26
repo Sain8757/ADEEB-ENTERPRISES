@@ -16,8 +16,9 @@ export async function GET() {
 
 export async function PATCH(req: NextRequest) {
   const session = await auth();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const role = (session.user as any).role;
+  if (!session || !session.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const user = session.user;
+  const role = (user as any).role;
   if (role !== 'ADMIN') return NextResponse.json({ error: 'Admin only' }, { status: 403 });
 
   const body = await req.json();
@@ -38,7 +39,7 @@ export async function PATCH(req: NextRequest) {
     },
   });
 
-  await audit({ userId: session.user.id, userEmail: session.user.email ?? undefined, action: AUDIT_ACTIONS.SETTINGS_CHANGE, entity: 'Business', entityId: updated.id, before: before as any, after: updated as any });
+  await audit({ userId: user.id, userEmail: user.email ?? undefined, action: AUDIT_ACTIONS.SETTINGS_CHANGE, entity: 'Business', entityId: updated.id, before: before as any, after: updated as any });
 
   return NextResponse.json(updated);
 }

@@ -13,7 +13,8 @@ import os from 'os';
 // Dynamic import for pdf-parse (CommonJS)
 async function extractPdfText(buffer: Buffer): Promise<string> {
   try {
-    const pdfParse = (await import('pdf-parse')).default;
+    const pdfParseMod = await import('pdf-parse');
+    const pdfParse = (pdfParseMod as any).default ?? (pdfParseMod as any);
     const data = await pdfParse(buffer);
     return data.text;
   } catch {
@@ -23,8 +24,9 @@ async function extractPdfText(buffer: Buffer): Promise<string> {
 
 export async function POST(req: NextRequest) {
   const session = await auth();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const role = (session.user as any).role;
+  if (!session || !session.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const user = session.user;
+  const role = (user as any).role;
   if (role === 'VIEWER') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const formData = await req.formData();
@@ -76,7 +78,7 @@ export async function POST(req: NextRequest) {
       filename: file.name,
       fileHash,
       fileSize: file.size,
-      uploadedById: session.user.id,
+      uploadedById: user.id,
       partyId,
       status: 'REVIEWING',
       rawExtract: rawText.slice(0, 50000), // cap storage

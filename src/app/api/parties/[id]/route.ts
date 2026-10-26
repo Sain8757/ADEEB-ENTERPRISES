@@ -25,8 +25,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const session = await auth();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const role = (session.user as any).role;
+  if (!session || !session.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const user = session.user;
+  const role = (user as any).role;
   if (role === 'VIEWER') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const before = await prisma.party.findUnique({ where: { id } });
@@ -44,7 +45,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   });
 
   const action = body.active === false ? AUDIT_ACTIONS.PARTY_DEACTIVATE : AUDIT_ACTIONS.UPDATE;
-  await audit({ userId: session.user.id, userEmail: session.user.email ?? undefined, action, entity: 'Party', entityId: party.id, before: before as any, after: party as any });
+  await audit({ userId: user.id, userEmail: user.email ?? undefined, action, entity: 'Party', entityId: party.id, before: before as any, after: party as any });
 
   return NextResponse.json(party);
 }

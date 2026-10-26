@@ -37,8 +37,9 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const session = await auth();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const role = (session.user as any).role;
+  if (!session || !session.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const user = session.user;
+  const role = (user as any).role;
   if (role === 'VIEWER') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const body = await req.json();
@@ -70,10 +71,10 @@ export async function POST(req: NextRequest) {
 
   // Post opening balance to ledger if non-zero
   if (parseFloat(data.openingBalance) !== 0) {
-    await postOpeningBalance(party as any, session.user.id);
+    await postOpeningBalance(party as any, user.id);
   }
 
-  await audit({ userId: session.user.id, userEmail: session.user.email ?? undefined, action: AUDIT_ACTIONS.CREATE, entity: 'Party', entityId: party.id, after: party as any });
+  await audit({ userId: user.id, userEmail: user.email ?? undefined, action: AUDIT_ACTIONS.CREATE, entity: 'Party', entityId: party.id, after: party as any });
 
   return NextResponse.json(party, { status: 201 });
 }

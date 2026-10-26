@@ -10,8 +10,9 @@ import { audit, AUDIT_ACTIONS } from '@/lib/audit';
 
 export async function POST(req: NextRequest) {
   const session = await auth();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const role = (session.user as any).role;
+  if (!session || !session.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const user = session.user;
+  const role = (user as any).role;
   if (role === 'VIEWER') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const { batchId, rows } = await req.json();
@@ -94,9 +95,9 @@ export async function POST(req: NextRequest) {
           totalWeight: String(row.totalWeight),
           rate: String(row.rate),
           notes: row.hasVc && row.category !== 'VC_HISTORICAL'
-            ? `Imported from PDF. Original category: V/C. Mapped to ${row.category} by ${session.user.email ?? 'user'}.`
+            ? `Imported from PDF. Original category: V/C. Mapped to ${row.category} by ${user.email ?? 'user'}.`
             : 'Imported from PDF.',
-          userId: session.user.id,
+          userId: user.id,
           importBatchId: batchId,
         });
 
@@ -114,8 +115,8 @@ export async function POST(req: NextRequest) {
         // Audit V/C mapping
         if (row.hasVc && row.category && row.category !== 'VC_HISTORICAL') {
           await audit({
-            userId: session.user.id,
-            userEmail: session.user.email ?? undefined,
+            userId: user.id,
+            userEmail: user.email ?? undefined,
             action: AUDIT_ACTIONS.VC_MAP,
             entity: 'PurchaseEntry',
             entityId: entry.id,
@@ -142,7 +143,7 @@ export async function POST(req: NextRequest) {
           method: row.paymentMethod === 'CASH_EX' ? 'CASH_EX_HISTORICAL' : row.paymentMethod,
           amount: String(row.paymentAmount),
           notes: 'Imported from PDF.',
-          userId: session.user.id,
+          userId: user.id,
           importBatchId: batchId,
           // Historical imports do NOT auto-generate Cash EX expenses
           // cashExRateConfig: undefined  — intentionally not passed for imports
@@ -174,13 +175,13 @@ export async function POST(req: NextRequest) {
     data: {
       status: errors.length > 0 && saved === 0 ? 'REJECTED' : 'CONFIRMED',
       confirmedAt: new Date(),
-      confirmedById: session.user.id,
+      confirmedById: user.id,
     },
   });
 
   await audit({
-    userId: session.user.id,
-    userEmail: session.user.email ?? undefined,
+    userId: user.id,
+    userEmail: user.email ?? undefined,
     action: AUDIT_ACTIONS.IMPORT_CONFIRM,
     entity: 'ImportBatch',
     entityId: batchId,
