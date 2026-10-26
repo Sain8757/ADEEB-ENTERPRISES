@@ -48,7 +48,7 @@ export default function NewPurchasePage() {
     partyId: '',
     receiptNo: '',
     qty: '',
-    category: 'BC' as 'BC' | 'SC',
+    category: '' as 'BC' | 'SC' | '',
     totalWeight: '',
     rate: '',
     notes: '',
@@ -91,19 +91,31 @@ export default function NewPurchasePage() {
     setSaving(true);
     setError('');
 
-    const res = await fetch('/api/purchases', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...form, qty: parseInt(form.qty) }),
-    });
-    const data = await res.json();
-    setSaving(false);
+    try {
+      const payload = {
+        ...form,
+        qty: parseInt(form.qty),
+        category: form.category ? form.category : null,
+      };
 
-    if (!res.ok) {
-      setError(data.error || 'Failed to save purchase.');
-      return;
+      const res = await fetch('/api/purchases', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      setSaving(false);
+
+      if (!res.ok) {
+        setError(data.error || 'Failed to save purchase.');
+        return;
+      }
+      router.push(`/purchases?success=Purchase+saved`);
+    } catch (err: any) {
+      setSaving(false);
+      setError(err.message || 'Network error occurred while saving.');
     }
-    router.push(`/purchases?success=Purchase+saved`);
   }
 
   if (role === 'VIEWER') {
@@ -143,8 +155,9 @@ export default function NewPurchasePage() {
             <div className='group-box-title'>Buffalo Details</div>
             <div className='form-row'>
               <div className='form-field' style={{ flex: 1 }}>
-                <label className='form-label'>Category *</label>
-                <select className='win95-select' value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value as 'BC' | 'SC' }))}>
+                <label className='form-label'>Category (optional)</label>
+                <select className='win95-select' value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value as 'BC' | 'SC' | '' }))}>
+                  <option value=''>— None / Blank —</option>
                   <option value='BC'>B/C — Big Cattle</option>
                   <option value='SC'>S/C — Small Cattle</option>
                 </select>

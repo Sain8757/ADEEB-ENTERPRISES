@@ -136,7 +136,7 @@ model PurchaseEntry {
   partyId       String
   receiptNo     String?
   qty           Int
-  category      Category
+  category      Category?
   totalWeight   Decimal   @db.Decimal(10, 3)
   avgWeight     Decimal   @db.Decimal(10, 3)
   rate          Decimal   @db.Decimal(10, 2)
@@ -236,6 +236,8 @@ model LedgerEntry {
   debit          Decimal   @default(0) @db.Decimal(15, 2)
   credit         Decimal   @default(0) @db.Decimal(15, 2)
   runningBalance Decimal   @db.Decimal(15, 2)
+  purchaseId     String?
+  paymentId      String?
   sourceTxId     String?   // PurchaseEntry.id or Payment.id
   sourceTxType   String?   // "PURCHASE" | "PAYMENT"
   createdById    String?
@@ -244,8 +246,8 @@ model LedgerEntry {
 
   party       Party          @relation(fields: [partyId], references: [id])
   createdBy   User?          @relation(fields: [createdById], references: [id])
-  purchase    PurchaseEntry? @relation(fields: [sourceTxId], references: [id], map: "ledger_purchase_fk")
-  payment     Payment?       @relation(fields: [sourceTxId], references: [id], map: "ledger_payment_fk")
+  purchase    PurchaseEntry? @relation(fields: [purchaseId], references: [id])
+  payment     Payment?       @relation(fields: [paymentId], references: [id])
 
   @@index([partyId, date])
   @@index([sourceTxId])
@@ -347,11 +349,11 @@ model PaymentMethod {
 // ─────────────────────────────────────────────
 
 model RateHistory {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   partyId   String
-  category  Category
-  rate      Decimal  @db.Decimal(10, 2)
-  usedAt    DateTime @default(now())
+  category  Category?
+  rate      Decimal   @db.Decimal(10, 2)
+  usedAt    DateTime  @default(now())
 
   @@index([partyId, category, usedAt])
 }

@@ -42,6 +42,8 @@ export default function NewPaymentPage() {
   const [error, setError] = useState('');
   const [cashExRate, setCashExRate] = useState(200);
   const [cashExBasis, setCashExBasis] = useState(100000);
+  const [applyCashEx, setApplyCashEx] = useState(true);
+  const [customCashExAmount, setCustomCashExAmount] = useState('');
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -77,19 +79,28 @@ export default function NewPaymentPage() {
     setSaving(true);
     setError('');
 
-    const res = await fetch('/api/payments', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
-    });
-    const data = await res.json();
-    setSaving(false);
+    try {
+      const res = await fetch('/api/payments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...form,
+          applyCashEx: isCashReceived ? applyCashEx : false,
+          manualCashExAmount: customCashExAmount || undefined,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      setSaving(false);
 
-    if (!res.ok) {
-      setError(data.error || 'Failed to save payment.');
-      return;
+      if (!res.ok) {
+        setError(data.error || 'Failed to save payment.');
+        return;
+      }
+      router.push('/payments?success=Payment+saved');
+    } catch (err: any) {
+      setSaving(false);
+      setError(err.message || 'Network error occurred while saving.');
     }
-    router.push('/payments?success=Payment+saved');
   }
 
   if (role === 'VIEWER') {
@@ -156,32 +167,59 @@ export default function NewPaymentPage() {
               </div>
             </div>
 
-            {/* Cash EX Preview — only for eligible cash received */}
+            {/* Cash EX Preview & Manual Control */}
             {isCashReceived && form.amount && (
-              <div style={{ background: '#e8f4ff', border: '2px solid #000080', padding: '6px 10px', marginTop: 8 }}>
-                <div style={{ fontWeight: 'bold', fontSize: 11, marginBottom: 4, color: '#000080' }}>
-                  💸 CASH EX Expense (Separate — NOT deducted from party payment)
+              <div style={{ background: '#e8f4ff', border: '2px solid #000080', padding: '8px 10px', marginTop: 8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 'bold', fontSize: 11, color: '#000080', cursor: 'pointer' }}>
+                    <input
+                      type='checkbox'
+                      checked={applyCashEx}
+                      onChange={e => setApplyCashEx(e.target.checked)}
+                    />
+                    <span>💸 Apply Cash EX Expense for this Party</span>
+                  </label>
+                  <span style={{ fontSize: 10, color: '#666' }}>
+                    {applyCashEx ? '✅ Enabled' : '⏸️ Skipped'}
+                  </span>
                 </div>
-                <div style={{ display: 'flex', gap: 16, fontSize: 11 }}>
-                  <div>
-                    <div style={{ color: '#808080' }}>Cash Received:</div>
-                    <div style={{ fontWeight: 'bold' }}>{fmt(form.amount)}</div>
-                  </div>
-                  <div style={{ color: '#808080' }}>→</div>
-                  <div>
-                    <div style={{ color: '#808080' }}>Cash EX Expense:</div>
-                    <div style={{ fontWeight: 'bold', color: '#800000' }}>{fmt(cashExAmount!)}</div>
-                  </div>
-                </div>
-                <div style={{ fontSize: 10, color: '#808080', marginTop: 4 }}>
-                  Formula: {fmt(form.amount)} × {cashExRate} ÷ {fmt(cashExBasis)} = {fmt(cashExAmount!)}
-                  <br />
-                  ✅ Party ledger will show FULL {fmt(form.amount)} received.
-                  <br />
-                  ✅ {fmt(cashExAmount!)} will be recorded separately in Cash EX expense ledger.
-                  <br />
-                  ❌ {fmt(cashExAmount!)} will NOT be deducted from the party&apos;s {fmt(form.amount)} payment.
-                </div>
+
+                {applyCashEx && (
+                  <>
+                    <div style={{ display: 'flex', gap: 16, alignItems: 'center', fontSize: 11 }}>
+                      <div>
+                        <div style={{ color: '#808080' }}>Cash Received:</div>
+                        <div style={{ fontWeight: 'bold' }}>{fmt(form.amount)}</div>
+                      </div>
+                      <div style={{ color: '#808080' }}>→</div>
+                      <div>
+                        <div style={{ color: '#808080' }}>Calculated Cash EX:</div>
+                        <div style={{ fontWeight: 'bold', color: '#800000' }}>{fmt(cashExAmount!)}</div>
+                      </div>
+                      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <label style={{ fontSize: 11, fontWeight: '600' }}>Custom Amount (₹):</label>
+                        <input
+                          className='win95-input'
+                          type='number'
+                          step='0.01'
+                          style={{ width: 110 }}
+                          value={customCashExAmount}
+                          onChange={e => setCustomCashExAmount(e.target.value)}
+                          placeholder={cashExAmount ?? ''}
+                        />
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 10, color: '#808080', marginTop: 6 }}>
+                      Formula: {fmt(form.amount)} × {cashExRate} ÷ {fmt(cashExBasis)} = {fmt(cashExAmount!)}
+                      <br />
+                      ✅ Party ledger will show FULL {fmt(form.amount)} received.
+                      <br />
+                      ✅ Cash EX will be recorded separately in business expense ledger.
+                      <br />
+                      ❌ Cash EX will NOT be deducted from the party&apos;s payment.
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>

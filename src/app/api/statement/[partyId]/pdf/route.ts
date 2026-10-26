@@ -71,8 +71,11 @@ export async function GET(
   // Category weight breakdown (B/C, S/C, V/C)
   const catWeightMap: Record<string, Decimal> = {};
   for (const p of purchases) {
-    const cat = p.category === 'BC' ? 'B/C' : p.category === 'SC' ? 'S/C' : 'V/C';
-    catWeightMap[cat] = (catWeightMap[cat] ?? new Decimal(0)).plus(new Decimal(p.totalWeight.toString()));
+    if (!p.category) continue;
+    const cat = p.category === 'BC' ? 'B/C' : p.category === 'SC' ? 'S/C' : p.category === 'VC_HISTORICAL' ? 'V/C' : '';
+    if (cat) {
+      catWeightMap[cat] = (catWeightMap[cat] ?? new Decimal(0)).plus(new Decimal(p.totalWeight.toString()));
+    }
   }
 
   // Payment method breakdown
@@ -203,7 +206,7 @@ function generateStatementHtml(data: any): string {
   const tableRows = allRows.map(row => {
     if (!row.isPayment) {
       const p = row.p;
-      const cat = p.category === 'BC' ? 'B/C' : p.category === 'SC' ? 'S/C' : 'V/C';
+      const cat = p.category === 'BC' ? 'B/C' : p.category === 'SC' ? 'S/C' : p.category === 'VC_HISTORICAL' ? 'V/C' : '';
       
       const subParts: string[] = [];
       if (p.notes) subParts.push(p.notes);

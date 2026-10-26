@@ -13,6 +13,8 @@ const paymentSchema = z.object({
   amount: z.string(),
   notes: z.string().optional(),
   bankRef: z.string().optional(),
+  applyCashEx: z.boolean().optional(),
+  manualCashExAmount: z.string().optional(),
 });
 
 export async function GET(req: NextRequest) {
@@ -71,6 +73,8 @@ export async function POST(req: NextRequest) {
     notes: data.notes,
     bankRef: data.bankRef,
     userId: user.id,
+    applyCashEx: data.applyCashEx,
+    manualCashExAmount: data.manualCashExAmount,
     cashExRateConfig,
   });
 

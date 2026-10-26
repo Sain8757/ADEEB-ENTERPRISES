@@ -9,7 +9,7 @@ const purchaseSchema = z.object({
   partyId: z.string(),
   receiptNo: z.string().optional(),
   qty: z.number().int().positive(),
-  category: z.enum(['BC', 'SC']),
+  category: z.enum(['BC', 'SC']).optional().nullable(),
   totalWeight: z.string(),
   rate: z.string(),
   notes: z.string().optional(),

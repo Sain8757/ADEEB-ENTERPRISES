@@ -62,10 +62,11 @@ export async function postPurchase(
         date: purchase.date,
         txType: "PURCHASE",
         refNo: purchase.receiptNo,
-        description: `Purchase — ${purchase.category} — Qty ${purchase.qty} — ${purchase.totalWeight}kg`,
+        description: `Purchase — ${purchase.category ?? 'General'} — Qty ${purchase.qty} — ${purchase.totalWeight}kg`,
         debit: amount.toFixed(2),
         credit: "0",
         runningBalance: newBalance.toFixed(2),
+        purchaseId: purchase.id,
         sourceTxId: purchase.id,
         sourceTxType: "PURCHASE",
         createdById: userId,
@@ -116,6 +117,7 @@ export async function postPayment(
         debit: debit.toFixed(2),
         credit: credit.toFixed(2),
         runningBalance: newBalance.toFixed(2),
+        paymentId: payment.id,
         sourceTxId: payment.id,
         sourceTxType: "PAYMENT",
         createdById: userId,
@@ -282,7 +284,7 @@ export async function createPurchaseEntry(data: {
   partyId: string;
   receiptNo?: string;
   qty: number;
-  category: "BC" | "SC" | "VC_HISTORICAL";
+  category?: "BC" | "SC" | "VC_HISTORICAL" | null;
   totalWeight: string;
   rate: string;
   notes?: string;
@@ -302,7 +304,7 @@ export async function createPurchaseEntry(data: {
         partyId: data.partyId,
         receiptNo: data.receiptNo,
         qty: data.qty,
-        category: data.category as any,
+        category: data.category ? (data.category as any) : null,
         totalWeight: data.totalWeight,
         avgWeight: calc.avgWeight.toFixed(3),
         rate: data.rate,
@@ -324,24 +326,27 @@ export async function createPurchaseEntry(data: {
         date: data.date,
         txType: "PURCHASE",
         refNo: data.receiptNo,
-        description: `Purchase — ${data.category} — Qty ${data.qty} — ${data.totalWeight}kg @ ₹${data.rate}/kg`,
+        description: `Purchase — ${data.category ?? 'General'} — Qty ${data.qty} — ${data.totalWeight}kg @ ₹${data.rate}/kg`,
         debit: amount.toFixed(2),
         credit: "0",
         runningBalance: newBalance.toFixed(2),
+        purchaseId: entry.id,
         sourceTxId: entry.id,
         sourceTxType: "PURCHASE",
         createdById: data.userId,
       },
     });
 
-    // Update rate history
-    await tx.rateHistory.create({
-      data: {
-        partyId: data.partyId,
-        category: data.category as any,
-        rate: data.rate,
-      },
-    });
+    // Update rate history if category provided
+    if (data.category) {
+      await tx.rateHistory.create({
+        data: {
+          partyId: data.partyId,
+          category: data.category as any,
+          rate: data.rate,
+        },
+      });
+    }
 
     return entry;
   });
@@ -372,6 +377,8 @@ export async function createPaymentEntry(data: {
   bankRef?: string;
   userId?: string;
   importBatchId?: string;
+  applyCashEx?: boolean;
+  manualCashExAmount?: string;
   cashExRateConfig?: { rate: number; basis: number };
 }): Promise<{ payment: Payment; cashExExpense?: CashExExpense }> {
   let createdPayment!: Payment;
@@ -418,6 +425,7 @@ export async function createPaymentEntry(data: {
         debit: debit.toFixed(2),
         credit: credit.toFixed(2),
         runningBalance: newBalance.toFixed(2),
+        paymentId: payment.id,
         sourceTxId: payment.id,
         sourceTxType: "PAYMENT",
         createdById: data.userId,
@@ -425,17 +433,22 @@ export async function createPaymentEntry(data: {
     });
 
     // Cash EX — SEPARATE expense, never deducted from party ledger
-    if (isCashExEligible(data.direction, data.method)) {
+    // Apply when explicitly enabled (or defaulted if not specified) and eligible
+    const shouldApply = data.applyCashEx !== undefined ? data.applyCashEx : isCashExEligible(data.direction, data.method);
+    if (shouldApply && isCashExEligible(data.direction, data.method)) {
       const rate = data.cashExRateConfig?.rate ?? 200;
       const basis = data.cashExRateConfig?.basis ?? 100000;
-      const cashExResult = calcCashEx({ cashReceived: data.amount, rate, basis });
+      const autoResult = calcCashEx({ cashReceived: data.amount, rate, basis });
+      const expenseAmount = data.manualCashExAmount && parseFloat(data.manualCashExAmount) > 0
+        ? new Decimal(data.manualCashExAmount).toFixed(2)
+        : autoResult.expenseAmount.toFixed(2);
 
       cashExExpense = await tx.cashExExpense.create({
         data: {
           paymentId: payment.id,
           date: data.date,
           cashAmount: data.amount,
-          expenseAmount: cashExResult.expenseAmount.toFixed(2),
+          expenseAmount,
           rateApplied: String(rate),
           basisApplied: String(basis),
           confirmedById: data.userId,
