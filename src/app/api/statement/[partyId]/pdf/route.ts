@@ -7,6 +7,7 @@ import { prisma } from '@/lib/prisma';
 import Decimal from 'decimal.js';
 import { ADEEB_LOGO_BASE64 } from '@/lib/logo';
 import { DISCLAIMER_STAMP_BASE64 } from '@/lib/stamp';
+import { generateStatementPdfBuffer } from '@/lib/statement-pdf';
 
 export async function GET(
   req: NextRequest,
@@ -153,6 +154,41 @@ export async function GET(
     return p.cashExExpense ? s.plus(new Decimal(p.cashExExpense.expenseAmount.toString())) : s;
   }, new Decimal(0));
   const totalCashEx = paymentCashExTotal.plus(directCashExTotal);
+
+  const safePartyName = (party.name || 'Statement').replace(/[^a-zA-Z0-9]/g, '_');
+  const pdfFilename = `${safePartyName}_Statement.pdf`;
+
+  const download = searchParams.get('download');
+  const format = searchParams.get('format');
+  if (download === '1' || download === 'true' || format === 'pdf') {
+    const pdfBuffer = await generateStatementPdfBuffer({
+      business,
+      party,
+      purchases,
+      payments,
+      directCashExList,
+      directCashExTotal,
+      totalCashEx,
+      from,
+      to,
+      openingSigned,
+      closingSigned,
+      totalPurchases,
+      totalPayments,
+      totalQty,
+      totalWeight,
+      catWeightMap,
+      methodBreakdown,
+    });
+
+    return new NextResponse(new Uint8Array(pdfBuffer), {
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="${pdfFilename}"`,
+        'Cache-Control': 'no-store, max-age=0',
+      },
+    });
+  }
 
   const host = req.headers.get('x-forwarded-host') || req.headers.get('host') || 'adeeb-enterprises.vercel.app';
   const protocol = req.headers.get('x-forwarded-proto') || (host.includes('localhost') ? 'http' : 'https');
@@ -397,9 +433,10 @@ function generateStatementHtml(data: any): string {
         ? `91${rawMobile.slice(1)}`
         : rawMobile;
 
+  const downloadPdfUrl = `${protocol}://${host}/api/statement/${party.id}/pdf?download=1${from || to ? `&from=${from || ''}&to=${to || ''}` : ''}`;
   const statementUrl = `${protocol}://${host}/api/statement/${party.id}/pdf${from || to ? `?from=${from || ''}&to=${to || ''}` : ''}`;
 
-  const whatsappText = `*${business?.name ?? 'ADEEB ENTERPRISES'}*\n*Hisab Statement — ${party.name}*\nPeriod: ${periodBoxStr}\n---------------------------------\nKharid (Purchases): ₹${fmtNum(totalPurchases, 0)} (${totalQty} Buffaloes, ${fmtNum(totalWeight, 1)} kg)\nJama (Payments): ₹${fmtNum(totalPayments, 0)}\n*Net Balance: ${fmtBalWithSymbol(closingSigned)}*\n---------------------------------\n📄 Online Statement PDF:\n${statementUrl}\n\nComputer-generated statement.`;
+  const whatsappText = `*${business?.name ?? 'ADEEB ENTERPRISES'}*\n*Hisab Statement — ${party.name}*\nPeriod: ${periodBoxStr}\n---------------------------------\n🐃 Kharid (Purchases): ₹${fmtNum(totalPurchases, 0)} (${totalQty} Buffaloes, ${fmtNum(totalWeight, 1)} kg)\n💰 Jama (Payments): ₹${fmtNum(totalPayments, 0)}\n📊 *Net Baqaya: ${fmtBalWithSymbol(closingSigned)}*\n---------------------------------\n📥 Download PDF Statement:\n${downloadPdfUrl}\n\n📄 Online View:\n${statementUrl}\n\nComputer-generated statement.`;
 
   const whatsappDirectUrl = whatsappPhone
     ? `https://wa.me/${whatsappPhone}?text=${encodeURIComponent(whatsappText)}`
@@ -768,7 +805,7 @@ table.statement-table tbody td {
 @media print {
   @page {
     size: A4 portrait;
-    margin: 10mm 12mm 26mm 12mm;
+    margin: 10mm 10mm 12mm 10mm;
   }
   html, body {
     width: 100% !important;
@@ -776,7 +813,7 @@ table.statement-table tbody td {
     padding: 0 !important;
     background: #ffffff !important;
   }
-  .no-print {
+  .no-print, #running-footer {
     display: none !important;
   }
   .doc-scroll-wrapper {
@@ -804,15 +841,20 @@ table.statement-table tbody td {
     font-size: 10.5px !important;
     overflow: hidden !important;
     word-break: break-word !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
   }
   table.statement-table tr {
-    page-break-inside: avoid;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
   .summary-container {
-    page-break-inside: avoid;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
   .doc-footer {
-    page-break-inside: avoid;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
   .watermark-container {
     position: fixed;
@@ -866,144 +908,96 @@ table.statement-table tbody td {
 }
 
 </style>
-<script src="/html2pdf.bundle.min.js"></script>
 <script>
 const filename = '${pdfFilename}';
 const partyName = '${safePartyName}';
 const whatsappPhone = '${whatsappPhone}';
 const whatsappDirectUrl = "${whatsappDirectUrl.replace(/"/g, '\\"')}";
-let currentPdfBlob = null;
+const pdfDownloadUrl = "/api/statement/${party.id}/pdf?download=1${from || to ? `&from=${encodeURIComponent(from || '')}&to=${encodeURIComponent(to || '')}` : ''}";
 let currentPdfFile = null;
 
-async function generatePdfBlob() {
-  const element = document.getElementById('statement-doc');
-  if (!window.html2pdf) {
-    throw new Error('PDF generator bundle not ready');
-  }
-
-  // Lock element to exact 780px during capture so mobile screens NEVER squish content
-  const origWidth = element.style.width;
-  const origMinWidth = element.style.minWidth;
-  const origMaxWidth = element.style.maxWidth;
-  element.style.width = '780px';
-  element.style.minWidth = '780px';
-  element.style.maxWidth = '780px';
-
-  const opt = {
-    margin: [10, 10, 15, 10],
-    filename: filename,
-    image: { type: 'jpeg', quality: 0.98 },
-    html2canvas: {
-      scale: 2,
-      width: 780,
-      windowWidth: 1200,
-      useCORS: true,
-      letterRendering: true,
-      backgroundColor: '#ffffff',
-      scrollY: 0,
-      logging: false,
-    },
-    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-  };
-
+// Pre-fetch server-side vector PDF in background so it is instantly available
+async function getPdfFile() {
+  if (currentPdfFile) return currentPdfFile;
   try {
-    return await html2pdf().set(opt).from(element).outputPdf('blob');
-  } finally {
-    element.style.width = origWidth;
-    element.style.minWidth = origMinWidth;
-    element.style.maxWidth = origMaxWidth;
+    const res = await fetch(pdfDownloadUrl);
+    const blob = await res.blob();
+    currentPdfFile = new File([blob], filename, { type: 'application/pdf' });
+    return currentPdfFile;
+  } catch (err) {
+    console.error('Error pre-fetching PDF:', err);
+    return null;
   }
 }
 
-async function downloadPdfFile() {
+// Download PDF directly from server (100% reliable across Desktop, iPhone & Android)
+function downloadPdfFile() {
   const btn = document.getElementById('btn-download');
-  const origText = btn ? btn.innerHTML : '';
-  if (btn) { btn.innerHTML = '⏳ Generating PDF...'; btn.disabled = true; }
-
-  try {
-    const blob = await generatePdfBlob();
-    currentPdfBlob = blob;
-    currentPdfFile = new File([blob], filename, { type: 'application/pdf' });
-
-    // Standard download
-    const blobUrl = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = blobUrl;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => { document.body.removeChild(a); }, 250);
-
-    // On iOS Safari where synthetic download is ignored, open in native viewer
-    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-    if (isIOS) {
-      window.location.href = blobUrl;
-    }
-  } catch (err) {
-    console.error('PDF generation error:', err);
-    alert('System print dialog se Save as PDF karein.');
-    window.print();
-  } finally {
-    if (btn) { btn.innerHTML = origText; btn.disabled = false; }
+  if (btn) {
+    btn.innerHTML = '⏳ Downloading...';
+    setTimeout(() => { btn.innerHTML = '📥 Download PDF'; }, 2000);
   }
-}
-
-async function shareWhatsAppPdf() {
-  const btn = document.getElementById('btn-whatsapp');
-  const origText = btn ? btn.innerHTML : '';
-  if (btn) { btn.innerHTML = '⏳ PDF Ban Raha Hai...'; btn.disabled = true; }
-
-  try {
-    const blob = await generatePdfBlob();
-    currentPdfBlob = blob;
-    currentPdfFile = new File([blob], filename, { type: 'application/pdf' });
-
-    // Open WhatsApp Share Modal
-    const modal = document.getElementById('whatsapp-share-modal');
-    if (modal) {
-      modal.style.display = 'flex';
-    }
-  } catch (err) {
-    console.error('WhatsApp share error:', err);
-    window.location.href = whatsappDirectUrl;
-  } finally {
-    if (btn) { btn.innerHTML = origText; btn.disabled = false; }
-  }
-}
-
-async function handleDirectNativeShare() {
-  if (!currentPdfFile) return;
-  if (navigator.canShare && navigator.canShare({ files: [currentPdfFile] })) {
-    try {
-      await navigator.share({
-        files: [currentPdfFile]
-      });
-      document.getElementById('whatsapp-share-modal').style.display = 'none';
-      return;
-    } catch (e) {
-      if (e.name === 'AbortError') return;
-    }
-  }
-  handleModalDownloadPdf();
-  window.open(whatsappDirectUrl, '_blank');
-  document.getElementById('whatsapp-share-modal').style.display = 'none';
-}
-
-function handleModalDownloadPdf() {
-  if (!currentPdfBlob) return;
-  const blobUrl = URL.createObjectURL(currentPdfBlob);
   const a = document.createElement('a');
-  a.href = blobUrl;
+  a.href = pdfDownloadUrl;
   a.download = filename;
   document.body.appendChild(a);
   a.click();
-  setTimeout(() => { document.body.removeChild(a); }, 250);
+  setTimeout(() => { document.body.removeChild(a); }, 200);
 
-  const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-  if (isIOS) {
-    window.location.href = blobUrl;
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  if (isMobile) {
+    window.location.href = pdfDownloadUrl;
   }
 }
+
+// Open WhatsApp Modal
+async function shareWhatsAppPdf() {
+  const modal = document.getElementById('whatsapp-share-modal');
+  if (modal) {
+    modal.style.display = 'flex';
+  }
+  getPdfFile();
+}
+
+// 1-Tap native share to WhatsApp (Passes actual PDF file)
+async function handleDirectNativeShare() {
+  const btn = document.getElementById('btn-native-share');
+  if (btn) btn.innerHTML = '⏳ Opening WhatsApp...';
+
+  const file = await getPdfFile();
+  if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({
+        files: [file],
+        title: partyName + ' Hisab Statement',
+        text: 'Hisab Statement — ' + partyName
+      });
+      document.getElementById('whatsapp-share-modal').style.display = 'none';
+      if (btn) btn.innerHTML = '<span>💬</span> <span>WhatsApp Par PDF File Bhejein</span>';
+      return;
+    } catch (e) {
+      if (e.name === 'AbortError') {
+        if (btn) btn.innerHTML = '<span>💬</span> <span>WhatsApp Par PDF File Bhejein</span>';
+        return;
+      }
+    }
+  }
+
+  // Fallback: download PDF and open WhatsApp party chat
+  downloadPdfFile();
+  window.open(whatsappDirectUrl, '_blank');
+  document.getElementById('whatsapp-share-modal').style.display = 'none';
+  if (btn) btn.innerHTML = '<span>💬</span> <span>WhatsApp Par PDF File Bhejein</span>';
+}
+
+function handleModalDownloadPdf() {
+  downloadPdfFile();
+}
+
+// Initiate background pre-fetch immediately
+window.addEventListener('DOMContentLoaded', () => {
+  getPdfFile();
+});
 </script>
 </head>
 <body>
@@ -1014,11 +1008,12 @@ function handleModalDownloadPdf() {
     <div style="font-size:36px; margin-bottom:8px;">📄</div>
     <div style="font-size:18px; font-weight:800; color:#0f172a; margin-bottom:4px;">Hisab Statement PDF Ready!</div>
     <div style="font-size:12px; color:#475569; margin-bottom:18px; line-height:1.4;">
-      Statement PDF generate ho chuka hai. WhatsApp par bhejne ke liye neeche diye gaye option par tap karein:
+      Statement PDF ready hai. WhatsApp par bhejne ke liye option chunein:
     </div>
 
     <!-- Option 1: Native Share to WhatsApp (Passes PDF file directly) -->
     <button
+      id="btn-native-share"
       onclick="handleDirectNativeShare()"
       style="width:100%; padding:13px 16px; background:#25D366; color:#ffffff; border:none; border-radius:8px; font-size:14px; font-weight:bold; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; margin-bottom:10px; box-shadow:0 3px 8px rgba(37,211,102,0.35);"
     >
@@ -1054,7 +1049,7 @@ function handleModalDownloadPdf() {
 
 <div class="no-print">
   <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-    <button id="btn-download" class="print-btn" style="background:#15803d; border-color:#16a34a;" onclick="downloadPdfFile()">📥 Download PDF</button>
+    <a id="btn-download" class="print-btn" style="background:#15803d; border-color:#16a34a; text-decoration:none; display:inline-flex; align-items:center;" href="${downloadPdfUrl}" download="${pdfFilename}" onclick="downloadPdfFile()">📥 Download PDF</a>
     <button class="print-btn" style="background:#2563eb; border-color:#3b82f6;" onclick="window.print()">🖨️ Print / Save as PDF</button>
     <button id="btn-whatsapp" class="print-btn" style="background:#25D366; color:#0f172a; border-color:#22c55e;" onclick="shareWhatsAppPdf()">💬 Send PDF on WhatsApp</button>
     ${whatsappPhone ? `<a href="${whatsappDirectUrl}" target="_blank" rel="noreferrer" class="print-btn" style="background:#075e54; color:#fff; text-decoration:none;">📲 Chat with Party (${whatsappPhone})</a>` : ''}
@@ -1066,6 +1061,9 @@ function handleModalDownloadPdf() {
     <label style="color:#cbd5e1;"><strong>To:</strong></label>
     <input type="date" name="to" value="${to ?? ''}" style="padding:4px 6px; border:1px solid #475569; background:#1e293b; color:#fff; border-radius:4px; font-size:11px;">
     <button type="submit" class="print-btn" style="background:#0284c7; border-color:#38bdf8; padding:5px 12px;">🔍 Apply Date</button>
+    ${from || to ? `<a href="/api/statement/${party.id}/pdf" style="font-size:11px; color:#94a3b8; margin-left:4px; text-decoration:underline;">All Dates</a>` : ''}
+  </form>
+</div>
     ${from || to ? `<a href="/api/statement/${party.id}/pdf" style="font-size:11px; color:#94a3b8; margin-left:4px; text-decoration:underline;">All Dates</a>` : ''}
   </form>
 </div>

@@ -225,8 +225,13 @@ function PartyLedgerHubContent() {
     const statementUrl = typeof window !== 'undefined'
       ? `${window.location.origin}/api/statement/${party.id}/pdf${from || to ? `?from=${from || ''}&to=${to || ''}` : ''}`
       : '';
-    const text = `*ADEEB ENTERPRISES*\n*Khata Parcha — ${party.name}*\nTareekh: ${dateRangeStr}\n---------------------------------\nKharid (Debits): ${fmt(totalPeriodDebits)}\nJama (Credits): ${fmt(totalPeriodCredits)}\n*Baki Hisab (Balance Due): ${fmt(Math.abs(lastBal))} ${balDir}*\n---------------------------------\n📄 Online PDF Statement:\n${statementUrl}\n---------------------------------\nComputer-generated statement.`;
-    return `https://api.whatsapp.com/send?${phone ? `phone=${encodeURIComponent(phone)}&` : ''}text=${encodeURIComponent(text)}`;
+    const downloadPdfUrl = typeof window !== 'undefined'
+      ? `${window.location.origin}/api/statement/${party.id}/pdf?download=1${from || to ? `&from=${from || ''}&to=${to || ''}` : ''}`
+      : '';
+    const text = `*ADEEB ENTERPRISES*\n*Khata Parcha — ${party.name}*\nTareekh: ${dateRangeStr}\n---------------------------------\n🐃 Kharid (Purchases): ${fmt(totalPeriodDebits)}\n💰 Jama (Payments): ${fmt(totalPeriodCredits)}\n📊 *Baki Hisab (Balance Due): ${fmt(Math.abs(lastBal))} ${balDir}*\n---------------------------------\n📥 Download Statement PDF:\n${downloadPdfUrl}\n\n📄 Online View:\n${statementUrl}\n---------------------------------\nComputer-generated statement.`;
+    return phone
+      ? `https://wa.me/${phone}?text=${encodeURIComponent(text)}`
+      : `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
   }, [party, from, to, totalPeriodDebits, totalPeriodCredits, lastBal, balDir]);
 
   // ── Purchase Handlers ────────────────────────────────
@@ -580,6 +585,15 @@ function PartyLedgerHubContent() {
 
               {/* Action Buttons */}
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <a
+                  href={`/api/statement/${partyId}/pdf?download=1&from=${from}&to=${to}`}
+                  download={`${(party.name || 'Statement').replace(/[^a-zA-Z0-9]/g, '_')}_Statement.pdf`}
+                  className='win95-btn'
+                  style={{ textDecoration: 'none', background: '#15803d', color: '#fff', fontWeight: 'bold' }}
+                  title='Download statement PDF file directly'
+                >
+                  📥 Download PDF
+                </a>
                 <a
                   href={`/api/statement/${partyId}/pdf?from=${from}&to=${to}`}
                   className='win95-btn' target='_blank' rel='noreferrer'

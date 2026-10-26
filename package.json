@@ -24,6 +24,8 @@
     "@prisma/client": "^5.22.0",
     "bcryptjs": "^3.0.3",
     "decimal.js": "^10.6.0",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.9",
     "next": "15.5.28",
     "next-auth": "^5.0.0-beta.32",
     "pdf-parse": "^2.4.5",
