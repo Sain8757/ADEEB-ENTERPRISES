@@ -18,20 +18,32 @@ interface StatementData {
   closingSigned: Decimal;
   totalPurchases: Decimal;
   totalPayments: Decimal;
+  totalPaid?: Decimal;
   totalQty: number;
   totalWeight: Decimal;
   catWeightMap?: Record<string, Decimal>;
   methodBreakdown?: Record<string, Decimal>;
 }
 
-function fmtNum(n: Decimal | number | string | null | undefined, dec = 0): string {
-  if (n === null || n === undefined || n === '') return '0';
-  const val = typeof n === 'object' && 'toNumber' in n ? (n as Decimal).toNumber() : Number(n);
-  if (isNaN(val)) return '0';
-  return val.toLocaleString('en-IN', {
-    minimumFractionDigits: dec,
-    maximumFractionDigits: dec,
-  });
+function fmtNum(v: Decimal | string | number | null | undefined, decimals = 0): string {
+  if (v === null || v === undefined || v === '') return '0';
+  const n = typeof v === 'object' && 'toNumber' in v ? (v as Decimal).toNumber() : parseFloat(String(v));
+  if (isNaN(n)) return '0';
+  const absStr = Math.abs(n).toFixed(decimals);
+  const [i, d] = absStr.split('.');
+  const groups: string[] = [];
+  let rest = i;
+  if (rest.length > 3) { groups.unshift(rest.slice(-3)); rest = rest.slice(0, -3); }
+  while (rest.length > 2) { groups.unshift(rest.slice(-2)); rest = rest.slice(0, -2); }
+  if (rest) groups.unshift(rest);
+  const formatted = groups.join(',');
+  return decimals > 0 && d ? `${formatted}.${d}` : formatted;
+}
+
+function fmtBalFullDecimal(v: Decimal): string {
+  const isNeg = v.isNegative();
+  const numStr = fmtNum(v.abs(), 2);
+  return isNeg ? `-Rs. ${numStr}` : `Rs. ${numStr}`;
 }
 
 function fmtDateShort(d: Date | string): string {
@@ -39,14 +51,37 @@ function fmtDateShort(d: Date | string): string {
   if (isNaN(dt.getTime())) return '';
   const day = dt.getDate();
   const m = dt.toLocaleString('en-IN', { month: 'short' });
-  const y = String(dt.getFullYear()).slice(-2);
-  return `${day} ${m} '${y}`;
+  return `${day} ${m}`;
+}
+
+function fmtIsoDate(d: Date | string): string {
+  const dt = new Date(d);
+  if (isNaN(dt.getTime())) return '';
+  const year = dt.getFullYear();
+  const month = String(dt.getMonth() + 1).padStart(2, '0');
+  const day = String(dt.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function fmtDateRange(from?: string | null, to?: string | null, purchases: any[] = []): string {
+  if (from && to) {
+    const f = new Date(from);
+    const t = new Date(to);
+    return `${f.getDate()} ${f.toLocaleString('en-IN', { month: 'short' })} — ${t.getDate()} ${t.toLocaleString('en-IN', { month: 'short' })} ${t.getFullYear()}`;
+  }
+  if (purchases.length > 0) {
+    const f = new Date(purchases[0].date);
+    const t = new Date(purchases[purchases.length - 1].date);
+    return `${f.getDate()} ${f.toLocaleString('en-IN', { month: 'short' })} — ${t.getDate()} ${t.toLocaleString('en-IN', { month: 'short' })} ${t.getFullYear()}`;
+  }
+  return 'All dates';
 }
 
 export async function generateStatementPdfBuffer(data: StatementData): Promise<Buffer> {
   const {
     business, party, purchases, payments,
     directCashExList = [],
+    directCashExTotal = new Decimal(0),
     from, to,
     openingSigned, closingSigned,
     totalPurchases, totalPayments,
@@ -70,8 +105,8 @@ export async function generateStatementPdfBuffer(data: StatementData): Promise<B
     if (!ADEEB_LOGO_BASE64) return;
     try {
       (doc as any).saveGraphicsState();
-      (doc as any).setGState(new (doc as any).GState({ opacity: 0.07 }));
-      const wmSize = 110;
+      (doc as any).setGState(new (doc as any).GState({ opacity: 0.08 }));
+      const wmSize = 105;
       const wmX = (pageWidth - wmSize) / 2;
       const wmY = (pageHeight - wmSize) / 2;
       doc.addImage(ADEEB_LOGO_BASE64, 'PNG', wmX, wmY, wmSize, wmSize, undefined, 'FAST');
@@ -129,22 +164,25 @@ export async function generateStatementPdfBuffer(data: StatementData): Promise<B
     curY += 4;
   }
 
-  const periodText = from && to
-    ? `${fmtDateShort(from)} — ${fmtDateShort(to)}`
-    : 'All transactions';
-  doc.text(`Period: ${periodText}`, margin, curY);
+  const periodSubStr = from && to 
+    ? `${fmtIsoDate(from)} to ${fmtIsoDate(to)}`
+    : purchases.length > 0
+      ? `${fmtIsoDate(purchases[0].date)} to ${fmtIsoDate(purchases[purchases.length - 1].date)}`
+      : 'All dates';
+  doc.text(`Period: ${periodSubStr}`, margin, curY);
 
-  // ── Top Right Stat Box (Balance & Totals) ──
-  const statBoxWidth = 70;
+  // ── Top Right Stat Box (Exact Match to HTML) ──
+  const statBoxWidth = 72;
   const statBoxX = pageWidth - margin - statBoxWidth;
   const statBoxY = 14;
 
   doc.setDrawColor(203, 213, 225); // #cbd5e1
   doc.setFillColor(255, 255, 255);
-  doc.rect(statBoxX, statBoxY, statBoxWidth, 38, 'FD');
+  doc.rect(statBoxX, statBoxY, statBoxWidth, 42, 'FD');
 
   const openDir = openingSigned.isPositive() && !openingSigned.isZero() ? 'DR' : openingSigned.isNegative() ? 'CR' : '';
   const closeDir = closingSigned.isPositive() && !closingSigned.isZero() ? 'DR' : closingSigned.isNegative() ? 'CR' : '';
+  const periodBoxStr = fmtDateRange(from, to, purchases);
 
   const statRows = [
     {
@@ -159,29 +197,35 @@ export async function generateStatementPdfBuffer(data: StatementData): Promise<B
       val: `Rs. ${fmtNum(closingSigned.abs(), 0)} ${closeDir}`,
       bold: true,
     },
+    {
+      label: 'PERIOD',
+      val: periodBoxStr,
+      bold: false,
+      isPeriod: true,
+    },
   ];
 
-  let sbY = statBoxY + 6;
+  let sbY = statBoxY + 5.5;
   for (let i = 0; i < statRows.length; i++) {
     const row = statRows[i];
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7.5);
+    doc.setFontSize(7);
     doc.setTextColor(71, 85, 105);
-    doc.text(row.label, statBoxX + 4, sbY);
+    doc.text(row.label, statBoxX + 3.5, sbY);
 
     doc.setFont('helvetica', row.bold ? 'bold' : 'normal');
-    doc.setFontSize(row.bold ? 9.5 : 8.5);
+    doc.setFontSize(row.bold ? 9.5 : (row as any).isPeriod ? 7.5 : 8);
     doc.setTextColor(row.bold ? 0 : 15, row.bold ? 0 : 23, row.bold ? 0 : 42);
-    doc.text(row.val, statBoxX + statBoxWidth - 4, sbY, { align: 'right' });
+    doc.text(row.val, statBoxX + statBoxWidth - 3.5, sbY, { align: 'right' });
 
     if (i < statRows.length - 1) {
       doc.setDrawColor(226, 232, 240);
-      doc.line(statBoxX, sbY + 3, statBoxX + statBoxWidth, sbY + 3);
-      sbY += 8.5;
+      doc.line(statBoxX, sbY + 2.5, statBoxX + statBoxWidth, sbY + 2.5);
+      sbY += 7.5;
     }
   }
 
-  // ── Combined Table Rows ──
+  // ── Combined Table Rows (Exact Match to HTML) ──
   type RowItem = { date: Date; kind: 'PURCHASE' | 'PAYMENT' | 'CASHEX'; p?: any; pay?: any; cex?: any };
   const allRows: RowItem[] = [
     ...purchases.map((p: any) => ({ date: p.date, kind: 'PURCHASE' as const, p })),
@@ -193,7 +237,10 @@ export async function generateStatementPdfBuffer(data: StatementData): Promise<B
     if (r.kind === 'PURCHASE') {
       const p = r.p;
       const cat = p.category === 'BC' ? 'B/C' : p.category === 'SC' ? 'S/C' : p.category === 'VC_HISTORICAL' ? 'V/C' : '';
-      const notes = [p.notes, p.receiptNo ? `Rcpt ${p.receiptNo}` : ''].filter(Boolean).join(' · ');
+      const subParts: string[] = [];
+      if (p.notes) subParts.push(p.notes);
+      if (p.receiptNo) subParts.push(`Receipt ${p.receiptNo}`);
+      const notes = subParts.join(' · ');
       const dateCell = notes ? `${fmtDateShort(p.date)}\n${notes}` : fmtDateShort(p.date);
       return [
         dateCell,
@@ -208,8 +255,17 @@ export async function generateStatementPdfBuffer(data: StatementData): Promise<B
     } else if (r.kind === 'PAYMENT') {
       const pay = r.pay;
       if (pay.direction !== 'RECEIVED') return null;
-      const mLabel = pay.method === 'CASH' ? 'Cash' : pay.method === 'AC' ? 'A/C' : pay.method === 'ADVANCE_JAMA' ? 'Adv Jama' : pay.method === 'CASH_EX' ? 'Cash EX' : pay.method;
-      const notes = [mLabel, pay.notes, pay.bankRef].filter(Boolean).join(' · ');
+      const methodLabels: Record<string, string> = {
+        CASH: 'Cash',
+        AC: 'A/C',
+        ADVANCE_JAMA: 'Advance Jama',
+        CASH_EX: 'Cash EX',
+      };
+      const mLabel = methodLabels[pay.method] ?? (pay.method === 'CASH_EX' ? 'Cash EX' : pay.method);
+      const subParts: string[] = [mLabel];
+      if (pay.notes) subParts.push(pay.notes);
+      if (pay.bankRef) subParts.push(pay.bankRef);
+      const notes = subParts.join(' · ');
       const dateCell = notes ? `${fmtDateShort(pay.date)}\n${notes}` : fmtDateShort(pay.date);
       return [
         dateCell,
@@ -223,8 +279,8 @@ export async function generateStatementPdfBuffer(data: StatementData): Promise<B
       ];
     } else if (r.kind === 'CASHEX') {
       const cex = r.cex;
-      const notes = ['Direct Cash EX', cex.notes].filter(Boolean).join(' · ');
-      const dateCell = notes ? `${fmtDateShort(cex.date)}\n${notes}` : fmtDateShort(cex.date);
+      const sub = cex.overrideReason ? `Cash EX · ${cex.overrideReason}` : 'Cash EX';
+      const dateCell = `${fmtDateShort(cex.date)}\n${sub}`;
       return [
         dateCell,
         '',
@@ -251,20 +307,20 @@ export async function generateStatementPdfBuffer(data: StatementData): Promise<B
     fmtNum(totalPayments, 0),
   ]];
 
-  const startTableY = Math.max(curY + 6, statBoxY + 41);
+  const startTableY = Math.max(curY + 6, statBoxY + 45);
 
   autoTable(doc, {
     startY: startTableY,
-    margin: { left: margin, right: margin, bottom: 18 },
+    margin: { left: margin, right: margin, bottom: 20 },
     head: [[
-      'Date',
-      'Qty',
-      'Cat',
-      'Tot Wt (kg)',
-      'Avg Wt (kg)',
-      'Rate (Rs)',
-      'Amount (Rs)',
-      'Payment (Rs)',
+      'DATE',
+      'QTY',
+      'CAT',
+      'TOT WT',
+      'AVG WT',
+      'RATE',
+      'AMOUNT',
+      'PAYMENT',
     ]],
     body: tableBody,
     foot: tableFoot,
@@ -302,53 +358,106 @@ export async function generateStatementPdfBuffer(data: StatementData): Promise<B
       lineWidth: 0.2,
     },
     didDrawPage: (data) => {
-      // Draw watermark on subsequent pages
       if (data.pageNumber > 1) {
         drawWatermark();
       }
     },
   });
 
-  // ── Summary & Breakdown after table ──
+  // ── Bottom Summary Section (100% Exact Match to HTML) ──
   const finalY = (doc as any).lastAutoTable.finalY + 6;
   const remainingSpace = pageHeight - finalY;
-  if (remainingSpace < 45) {
+  if (remainingSpace < 55) {
     doc.addPage();
     drawWatermark();
   }
-  const summaryY = remainingSpace < 45 ? 16 : finalY;
+  let summaryY = remainingSpace < 55 ? 16 : finalY;
 
-  // Breakdown text (right aligned)
+  // Formula Row Math
+  const openingSignPrefix = openingSigned.isNegative() ? '-' : '';
+  const openingFormulaStr = `${openingSignPrefix}${fmtNum(openingSigned.abs(), 2)}`;
+  const purchasesFormulaStr = fmtNum(totalPurchases, 2);
+  const paymentsFormulaStr = fmtNum(totalPayments, 2);
+  const closingResultStr = fmtBalFullDecimal(closingSigned);
+
+  // 1. FORMULA ROW
   doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(71, 85, 105);
+  const formulaLabel = 'OPENING + AMOUNT - PAYMENT';
+  doc.text(formulaLabel, pageWidth - margin - 85, summaryY, { align: 'right' });
+
+  doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);
   doc.setTextColor(51, 65, 85);
+  const formulaMath = `${openingFormulaStr} + ${purchasesFormulaStr} - ${paymentsFormulaStr} =`;
+  doc.text(formulaMath, pageWidth - margin - 35, summaryY, { align: 'right' });
 
-  const bcWt = catWeightMap['B/C'] ? fmtNum(catWeightMap['B/C'], 1) : '0.0';
-  const scWt = catWeightMap['S/C'] ? fmtNum(catWeightMap['S/C'], 1) : '0.0';
-  const loadsSummary = `Total Buffaloes: ${totalQty} | B/C: ${bcWt} kg | S/C: ${scWt} kg`;
-  doc.text(loadsSummary, pageWidth - margin, summaryY, { align: 'right' });
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(0, 0, 0);
+  doc.text(closingResultStr, pageWidth - margin, summaryY, { align: 'right' });
 
-  const methodsList: string[] = [];
-  if (methodBreakdown['CASH']) methodsList.push(`Cash: Rs. ${fmtNum(methodBreakdown['CASH'], 0)}`);
-  if (methodBreakdown['AC']) methodsList.push(`A/C: Rs. ${fmtNum(methodBreakdown['AC'], 0)}`);
-  if (methodBreakdown['ADVANCE_JAMA']) methodsList.push(`Adv: Rs. ${fmtNum(methodBreakdown['ADVANCE_JAMA'], 0)}`);
-  if (methodBreakdown['CASH_EX']) methodsList.push(`Cash EX: Rs. ${fmtNum(methodBreakdown['CASH_EX'], 0)}`);
-  if (methodsList.length > 0) {
+  summaryY += 5;
+
+  // 2. LOADS BREAKDOWN LINE
+  // Exact format: Closing balance · X loads · Y total · B/C Z
+  const loadCount = purchases.length;
+  const catParts = Object.entries(catWeightMap).map(([c, w]) => `${c} ${fmtNum(w as Decimal, 1)}`);
+  const loadsLine = `Closing balance · ${loadCount} loads · ${fmtNum(totalWeight, 1)} total${catParts.length > 0 ? ' · ' + catParts.join(' · ') : ''}`;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(71, 85, 105);
+  doc.text(loadsLine, pageWidth - margin, summaryY, { align: 'right' });
+
+  summaryY += 4.5;
+
+  // 3. PAYMENT METHODS BREAKDOWN LINE
+  const methodLabels: Record<string, string> = {
+    CASH: 'Cash',
+    AC: 'A/C',
+    ADVANCE_JAMA: 'Advance Jama',
+    CASH_EX: 'Cash EX',
+  };
+  const methodParts = Object.entries(methodBreakdown).map(
+    ([m, val]) => `${methodLabels[m] ?? m} ${fmtNum(val as Decimal, 0)}`
+  );
+  if (directCashExTotal && directCashExTotal.gt(0) && !methodBreakdown['CASH_EX']) {
+    methodParts.push(`Cash EX ${fmtNum(directCashExTotal, 0)}`);
+  }
+  const methodsLine = methodParts.join('  ·  ');
+
+  if (methodsLine) {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
-    doc.text(methodsList.join(' · '), pageWidth - margin, summaryY + 4.5, { align: 'right' });
+    doc.setTextColor(71, 85, 105);
+    doc.text(methodsLine, pageWidth - margin, summaryY, { align: 'right' });
+    summaryY += 4.5;
   }
 
-  // Stamp badge image
+  // 4. APP FOOTER NOTE
+  const footerNote = business?.statementFooter ?? 'Amounts you record. Not calculated, filed or verified by this app.';
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(100, 116, 139);
+  doc.text(footerNote, pageWidth - margin, summaryY, { align: 'right' });
+
+  summaryY += 8;
+
+  // ── Official Disclaimer Rubber Stamp (Centered at bottom) ──
   if (DISCLAIMER_STAMP_BASE64) {
     try {
-      doc.addImage(DISCLAIMER_STAMP_BASE64, 'PNG', pageWidth - margin - 58, summaryY + 7, 58, 22, undefined, 'FAST');
+      const stampWidth = 62;
+      const stampHeight = 22;
+      const stampX = (pageWidth - stampWidth) / 2;
+      doc.addImage(DISCLAIMER_STAMP_BASE64, 'PNG', stampX, summaryY, stampWidth, stampHeight, undefined, 'FAST');
     } catch {
       // fallback
     }
   }
 
-  // Bottom Disclaimer on all pages
+  // ── Running Page Disclaimer at the absolute bottom of all pages ──
   const totalPages = doc.internal.pages.length - 1;
   for (let p = 1; p <= totalPages; p++) {
     doc.setPage(p);
