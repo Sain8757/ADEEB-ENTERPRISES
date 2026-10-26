@@ -26,21 +26,51 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ part
   const party = await prisma.party.findUnique({ where: { id: partyId } });
   if (!party) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  const entries = await prisma.ledgerEntry.findMany({
-    where: {
-      partyId,
-      reversed: false,
-      date: {
-        gte: fromDate,
-        lte: toDate,
+  const [entries, purchases, payments] = await Promise.all([
+    prisma.ledgerEntry.findMany({
+      where: {
+        partyId,
+        reversed: false,
+        date: {
+          gte: fromDate,
+          lte: toDate,
+        },
       },
-    },
-    orderBy: [{ date: 'asc' }, { createdAt: 'asc' }],
-    include: {
-      purchase: true,
-      payment: { include: { cashExExpense: true } },
-    },
-  });
+      orderBy: [{ date: 'asc' }, { createdAt: 'asc' }],
+      include: {
+        purchase: true,
+        payment: { include: { cashExExpense: true } },
+      },
+    }),
+    prisma.purchaseEntry.findMany({
+      where: {
+        partyId,
+        reversed: false,
+        date: {
+          gte: fromDate,
+          lte: toDate,
+        },
+      },
+      orderBy: { date: 'desc' },
+    }),
+    prisma.payment.findMany({
+      where: {
+        partyId,
+        reversed: false,
+        date: {
+          gte: fromDate,
+          lte: toDate,
+        },
+      },
+      orderBy: { date: 'desc' },
+      include: { cashExExpense: true },
+    }),
+  ]);
 
-  return NextResponse.json({ party, entries });
+  // Extract all cash ex expenses for this party's payments
+  const cashExExpenses = payments
+    .map(p => p.cashExExpense)
+    .filter(Boolean);
+
+  return NextResponse.json({ party, entries, purchases, payments, cashExExpenses });
 }

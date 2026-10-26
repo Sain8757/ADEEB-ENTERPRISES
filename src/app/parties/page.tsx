@@ -143,13 +143,19 @@ export default function PartiesPage() {
                   </td>
                   <td>{p.active ? '✅ Active' : '❌ Inactive'}</td>
                   <td>
-                    <div style={{ display: 'flex', gap: 4 }}>
-                      <Link href={`/ledger/${p.id}`} className='win95-btn' style={{ textDecoration: 'none', fontSize: 10, padding: '2px 6px' }}>
+                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                      <Link href={`/ledger/${p.id}`} className='win95-btn' style={{ textDecoration: 'none', fontSize: 10, padding: '2px 6px', fontWeight: 'bold' }}>
                         📒 Ledger
                       </Link>
-                      <Link href={`/parties/${p.id}`} className='win95-btn' style={{ textDecoration: 'none', fontSize: 10, padding: '2px 6px' }}>
-                        👤 Details
+                      <Link href={`/ledger/${p.id}?tab=purchases`} className='win95-btn' style={{ textDecoration: 'none', fontSize: 10, padding: '2px 6px' }}>
+                        🐃 Kharid
                       </Link>
+                      <Link href={`/ledger/${p.id}?tab=payments`} className='win95-btn' style={{ textDecoration: 'none', fontSize: 10, padding: '2px 6px' }}>
+                        💰 Jama
+                      </Link>
+                      <a href={`/api/statement/${p.id}/pdf`} target='_blank' rel='noreferrer' className='win95-btn' style={{ textDecoration: 'none', fontSize: 10, padding: '2px 6px' }}>
+                        🖨️ PDF
+                      </a>
                     </div>
                   </td>
                 </tr>

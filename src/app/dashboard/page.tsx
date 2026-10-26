@@ -93,7 +93,15 @@ export default function DashboardPage() {
                       return (
                         <tr key={e.id}>
                           <td>{new Date(e.date).toLocaleDateString('en-IN')}</td>
-                          <td>{e.party?.name ?? '—'}</td>
+                          <td>
+                            {e.partyId ? (
+                              <a href={`/ledger/${e.partyId}`} style={{ color: '#000080', fontWeight: 'bold', textDecoration: 'underline' }}>
+                                {e.party?.name ?? '—'}
+                              </a>
+                            ) : (
+                              e.party?.name ?? '—'
+                            )}
+                          </td>
                           <td>{e.txType}</td>
                           <td style={{ maxWidth: 200 }}>{e.description}</td>
                           <td className='amount'>{parseFloat(e.debit) > 0 ? fmt(e.debit) : ''}</td>

@@ -1,11 +1,10 @@
 "use client";
-// ADEEB ENTERPRISES — Main application shell (Windows 95 desktop layout)
-// Renders title bar, menu bar, sidebar, workspace, and status bar.
+// ADEEB ENTERPRISES — Main application shell
+// Clean modern layout with Title bar, Quick Toolbar, Focused Sidebar (5 items), Workspace, and Status bar.
 
 import { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -16,88 +15,13 @@ interface AppShellProps {
   statusText?: string;
 }
 
+// Sidebar: ONLY Dashboard, Parties, Reports, Trash Bin, Settings as requested
 const NAV_ITEMS = [
-  { label: "Dashboard",        href: "/dashboard",   icon: "🏠" },
-  { label: "Parties",          href: "/parties",     icon: "👥" },
-  { label: "Purchase Entry",   href: "/purchases",   icon: "🐃" },
-  { label: "Payments",         href: "/payments",    icon: "💰" },
-  { label: "Cash EX",          href: "/cash-ex",     icon: "💸" },
-  { label: "PDF Import",       href: "/import",      icon: "📄" },
-  { label: "Party Ledger",     href: "/ledger",      icon: "📒" },
-  { label: "Reports",          href: "/reports",     icon: "📊" },
-  { label: "Audit Log",        href: "/reports/audit", icon: "🔍" },
-  { label: "Trash Bin",        href: "/trash",       icon: "🗑️" },
-  { label: "Settings",         href: "/settings",    icon: "⚙️" },
-];
-
-const MENU_ITEMS = [
-  {
-    label: "File",
-    items: [
-      { label: "Dashboard",     href: "/dashboard" },
-      { separator: true },
-      { label: "PDF Import",    href: "/import" },
-      { separator: true },
-      { label: "Sign Out",      href: "/api/auth/signout" },
-    ],
-  },
-  {
-    label: "Transactions",
-    items: [
-      { label: "New Purchase",  href: "/purchases/new" },
-      { label: "New Payment",   href: "/payments/new" },
-      { separator: true },
-      { label: "All Purchases", href: "/purchases" },
-      { label: "All Payments",  href: "/payments" },
-      { label: "Cash EX",       href: "/cash-ex" },
-    ],
-  },
-  {
-    label: "Parties",
-    items: [
-      { label: "Party List",    href: "/parties" },
-      { label: "New Party",     href: "/parties/new" },
-      { separator: true },
-      { label: "Trash Bin",     href: "/trash" },
-    ],
-  },
-  {
-    label: "Reports",
-    items: [
-      { label: "Daily",         href: "/reports/daily" },
-      { label: "Monthly",       href: "/reports/monthly" },
-      { label: "Party Ledger",  href: "/reports/party-ledger" },
-      { label: "Outstanding",   href: "/reports/outstanding" },
-      { label: "Purchase Summary", href: "/reports/purchases" },
-      { label: "Payment Methods",  href: "/reports/payments" },
-      { label: "Cash EX Expenses", href: "/reports/cash-ex" },
-      { separator: true },
-      { label: "Audit Log",     href: "/reports/audit" },
-    ],
-  },
-  {
-    label: "Tools",
-    items: [
-      { label: "PDF Import",    href: "/import" },
-      { label: "Export CSV",    href: "/reports?export=csv" },
-    ],
-  },
-  {
-    label: "Settings",
-    items: [
-      { label: "Business Profile", href: "/settings" },
-      { label: "Users & Access",   href: "/settings/users" },
-      { label: "Payment Methods",  href: "/settings/payment-methods" },
-    ],
-  },
-  {
-    label: "Help",
-    items: [
-      { label: "Ledger Convention", href: "/help#ledger" },
-      { label: "Cash EX Rule",      href: "/help#cashex" },
-      { label: "About",             href: "/about" },
-    ],
-  },
+  { label: "Dashboard", href: "/dashboard", icon: "🏠" },
+  { label: "Parties",   href: "/parties",   icon: "👥" },
+  { label: "Reports",   href: "/reports",   icon: "📊" },
+  { label: "Trash Bin", href: "/trash",     icon: "🗑️" },
+  { label: "Settings",  href: "/settings",  icon: "⚙️" },
 ];
 
 export default function AppShell({
@@ -110,7 +34,6 @@ export default function AppShell({
 }: AppShellProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [time, setTime] = useState("");
 
   useEffect(() => {
@@ -129,13 +52,6 @@ export default function AppShell({
     return () => clearInterval(id);
   }, []);
 
-  // Close menus on outside click
-  useEffect(() => {
-    const handler = () => setActiveMenu(null);
-    document.addEventListener("click", handler);
-    return () => document.removeEventListener("click", handler);
-  }, []);
-
   return (
     <div className="desktop">
       <div className="win-window">
@@ -151,42 +67,11 @@ export default function AppShell({
           <button className="title-btn" title="Close">✕</button>
         </div>
 
-        {/* ── MENU BAR ───────────────────────────── */}
-        <div className="menu-bar" onClick={(e) => e.stopPropagation()}>
-          {MENU_ITEMS.map((menu) => (
-            <div
-              key={menu.label}
-              className={`menu-item ${activeMenu === menu.label ? "active" : ""}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                setActiveMenu(activeMenu === menu.label ? null : menu.label);
-              }}
-            >
-              {menu.label}
-              <div className="menu-dropdown">
-                {menu.items.map((item, i) =>
-                  (item as any).separator ? (
-                    <div key={i} className="menu-dropdown-separator" />
-                  ) : (
-                    <div
-                      key={(item as any).label}
-                      className="menu-dropdown-item"
-                      onClick={() => {
-                        setActiveMenu(null);
-                        router.push((item as any).href);
-                      }}
-                    >
-                      {(item as any).label}
-                    </div>
-                  )
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* ── TOOLBAR ────────────────────────────── */}
-        <div className="toolbar">
+        {/* ── TOOLBAR (Quick Access) ────────────── */}
+        <div className="toolbar" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px' }}>
+          <button className="toolbar-btn" onClick={() => router.push("/parties")} title="Parties (Vyapari)">
+            👥 <span className="label"> Parties</span>
+          </button>
           <button className="toolbar-btn" onClick={() => router.push("/purchases/new")} title="New Purchase">
             🐃 <span className="label"> New Purchase</span>
           </button>
@@ -194,12 +79,11 @@ export default function AppShell({
             💰 <span className="label"> New Payment</span>
           </button>
           <div className="toolbar-separator" />
-          <button className="toolbar-btn" onClick={() => router.push("/import")} title="PDF Import">
-            📄 <span className="label"> Import PDF</span>
-          </button>
-          <div className="toolbar-separator" />
           <button className="toolbar-btn" onClick={() => router.push("/reports")} title="Reports">
             📊 <span className="label"> Reports</span>
+          </button>
+          <button className="toolbar-btn" onClick={() => router.push("/trash")} title="Trash Bin">
+            🗑️ <span className="label"> Trash Bin</span>
           </button>
           <button className="toolbar-btn" onClick={() => router.push("/settings")} title="Settings">
             ⚙️ <span className="label"> Settings</span>
@@ -208,7 +92,7 @@ export default function AppShell({
 
         {/* ── BODY (sidebar + workspace) ─────────── */}
         <div className="app-body">
-          {/* Sidebar */}
+          {/* Sidebar (Clean 5 items) */}
           <nav className="sidebar">
             <div className="sidebar-section">
               <div className="sidebar-heading">Workspace</div>
